@@ -1,0 +1,14 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyverse)
+```
+
+```{r}
+goog_mob_data <- read_csv(file.path("..", "data", "mobility", "Global_Mobility_Report.csv"), col_types = lst("sub_region_2" = col_character()))
+```
+
+
