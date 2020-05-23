@@ -8,21 +8,20 @@ data {
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
 
-  int<lower = 1> days_observed[sum(N_subnational)]; // Days observed per subnational entity can be different
+  int<lower = 1> days_observed[sum(N_subnational)]; // Days observed per national/subnational entity can be different
   int<lower = 1, upper = min(days_observed)> days_to_impute_cases; // Same for all national/subnational entities. We can change that to vary if needed.
   int<lower = max(days_observed)> total_days; // days observed + days to predict to
 
-  int<lower = 0> population[sum(N_subnational)];
-
-  int<lower = 0> deaths[sum(days_observed)];
-
-  vector<lower = 0>[sum(N_subnational)] mean_ifr; // Not sure we'd have this at the subnational level. If we don't we change this to the national level.
-
-  vector<lower = 0>[max(days_observed)] time_to_death; // This is pi in the Vollmer model. Needs to be pre-computed using ecdf(); it's the sum of two gamma distributions
+  vector<lower = 0>[max(days_observed)] time_to_death; // This is pi in the Vollmer model. Needs to be pre-computed empirically using ecdf(); it's the sum of two gamma distributions
 
   int<lower = 0> num_coef; // Number of coefficients for linear model
 
-  matrix[total_days, num_coef] design_matrix[sum(N_subnational)];
+  // Below is the data needed
+
+  int<lower = 0> population[sum(N_subnational)];
+  vector<lower = 0>[sum(N_subnational)] mean_ifr; // Not sure we'd have this at the subnational level. If we don't we change this to the national level.
+  matrix[total_days, num_coef] design_matrix[sum(N_subnational)]; // E.g., mobility
+  int<lower = 0> deaths[fit_model ? sum(days_observed) : 0];
 }
 
 transformed data {
