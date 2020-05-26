@@ -5,10 +5,34 @@ output: html_notebook
 
 ```{r setup}
 library(tidyverse)
+library(haven)
 ```
+
+# Mobility Data
 
 ```{r}
 goog_mob_data <- read_csv(file.path("..", "data", "mobility", "Global_Mobility_Report.csv"), col_types = lst("sub_region_2" = col_character()))
+```
+
+# IFR from Vollmer et al.
+
+```{r}
+popt_ifr <- read_csv(file.path("..", "..", "covid19model", "data", "popt_ifr.csv"))
+```
+
+# Cleaned Data
+
+```{r}
+natsubnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "master.dta")) %>% 
+  mutate_if(is.labelled, as_factor)
+```  
+
+```{r}
+natsubnat_data %>% count(subregion)
+```
+
+```{r}
+subnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta"))
 ```
 
 
