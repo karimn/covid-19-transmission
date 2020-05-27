@@ -21,6 +21,8 @@ age_conv <- list(
   "80+" =   c("80-84", "85-89", "90-94", "95-99", "100+")
 )
 
+# This is age stratified population used in calculating IFR. Subnational population figures are not available.
+
 pop_data <- bind_rows(
   female = popF,
   male = popM,
@@ -36,11 +38,48 @@ pop_data <- bind_rows(
   summarise(pop = sum(pop * 1000)) %>%
   ungroup()
 
+# Trying to get some subnational population sizes for some of the subnational entities in the main infection/deaths data.
+# So far really only using Brazil, India, and China.
+
+wb_pop_data <- read_csv(file.path("data", "population", "wb_subnational_pop.csv")) %>%
+  filter(fct_match(`Series Code`, "SP.POP.TOTL")) %>%
+  tidyr::extract(`Country Code`, c("countrycode_string", "sub_region"), "^(\\w{3})_[^\\.]+\\.(\\w{2})", remove = FALSE) %>%
+  mutate(
+    # For some subnational regions we don't have their code in the below infection/deaths data
+    sub_region = if_else(fct_match(countrycode_string, c("IND", "CHN")), str_extract(`Country Name`, "(?<=,\\s).+"), sub_region),
+    sub_region = str_remove(sub_region, "\\s+(Sheng|Shi)$")
+  ) %>%
+  select(-`Series Name`, -`Series Code`, -Level_attr, -`Country Name`, -`Country Code`) %>%
+  filter(!is.na(countrycode_string), !is.na(sub_region)) %>%
+  pivot_longer(-c(countrycode_string, sub_region), names_to = "year", names_pattern = "(^\\d{4})", values_to = "pop") %>%
+  group_by(countrycode_string, sub_region) %>%
+  filter(min_rank(year) == n()) %>% # Just the last year available
+  ungroup() %>%
+  select(-year)
+
+
+# Subnational Mobility Data -----------------------------------------------
+
+subnat_mob_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Data Collection", "Travel", "clean", "google_trends.dta")) %>%
+  select(countrycode_string, sub_region, date, starts_with("g_")) %>%
+  mutate(average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4) %>%
+  group_nest(countrycode_string, sub_region, .key = "daily_data") %>%
+  mutate(
+    first_day = map(daily_data, pull, date) %>% map_dbl(min),
+    last_day = map(daily_data, pull, date) %>% map_dbl(max)
+  ) %>%
+  mutate_at(vars(first_day, last_day), lubridate::as_date)
 
 # Subnational Deaths Data -------------------------------------------------
 
-subnat_deaths_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta")) %>%
-  left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string")
+subnat_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta")) %>%
+  left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>%
+  group_nest(countrycode, countrycode_string, sub_region, .key = "daily_data") %>%
+  inner_join(subnat_mob_data, by = c("countrycode_string", "sub_region"), suffix = c("_spread", "_mob"))
+  # full_join(subnat_mob_data, by = c("countrycode_string", "sub_region", "date")) %>%
+  # mutate(days_observed = map_int(daily_data, nrow)) %>%
+  # arrange(countrycode, sub_region) %>%
+  # left_join(wb_pop_data, by = c("countrycode_string", "sub_region")) # Only available for regions (not all) in Brazil, India, and China
 
 # IFR ---------------------------------------------------------------------
 
@@ -66,8 +105,25 @@ quant_time_to_death <- ecdf(
     EnvStats::rgammaAlt(1e6, 18.8, 0.45) # onset-to-death distribution
 )
 
-c(0, seq(1.5, by = 1, length.out = 20)) %>% # TODO figure out  correct
+time_to_death <- c(0, seq(1.5, by = 1, length.out = max(subnat_deaths_data$days_observed))) %>%
   map_dbl(quant_time_to_death) %>%
   subtract(lag(.)) %>%
   discard(is.na)
 
+# Stan Data ---------------------------------------------------------------
+
+use_subnat_data <- subnat_data %>%
+  filter(!is.na(pop)) %>%
+  semi_join(subnat_mob_data, by = "countrycode_string") %>%
+  arrange(countrycode)
+
+stan_data <- lst(
+  fit_model = 1,
+
+  N_national = n_distinct(use_subnat_data$countrycode),
+  N_subnational = use_subnat_data %>% count(countrycode) %>% pull(n),
+
+  days_observed = use_subnat_data$days_observed,
+  days_to_impute_cases = 6,
+  total_days = max(days_observed),
+)
