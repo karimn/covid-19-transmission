@@ -83,7 +83,15 @@ subnat_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis",
     daily_data = map2(daily_data_spread, daily_data_mob, right_join, by = "date")
   ) %>%
   select(-daily_data_mob, -daily_data_spread) %>%
-  mutate(days_observed = map_int(daily_data, nrow)) %>%
+  filter(map_int(daily_data, nrow) > 0) %>% # Only entities with any observations
+  mutate(
+    first_day = map(daily_data, pull, date) %>% map_dbl(min, na.rm = TRUE) %>% lubridate::as_date(),
+    last_day = map(daily_data, pull, date) %>% map_dbl(max, na.rm = TRUE) %>% lubridate::as_date(),
+    daily_data = pmap(lst(daily_data, first_day, last_day), ~ complete(..1, date = seq.Date(from = ..2, to = ..3, by = "day"))),
+    days_observed = map_int(daily_data, nrow),
+    num_missing_new_deaths = map(daily_data, filter, is.na(new_deaths)) %>% map_int(nrow),
+    num_missing_mob = map(daily_data, select, starts_with("g_")) %>% map(map, is.na) %>% map(reduce, ~ .x | .y) %>% map_int(sum)
+    ) %>%
   arrange(countrycode, sub_region) %>%
   left_join(wb_pop_data, by = c("countrycode_string", "sub_region")) # Only available for regions (not all) in Brazil, India, and China
 
