@@ -65,21 +65,27 @@ subnat_mob_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Data C
   mutate(average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4) %>%
   group_nest(countrycode_string, sub_region, .key = "daily_data") %>%
   mutate(
-    first_day = map(daily_data, pull, date) %>% map_dbl(min),
-    last_day = map(daily_data, pull, date) %>% map_dbl(max)
+    first_day_mob = map(daily_data, pull, date) %>% map_dbl(min),
+    last_day_mob = map(daily_data, pull, date) %>% map_dbl(max)
   ) %>%
-  mutate_at(vars(first_day, last_day), lubridate::as_date)
+  mutate_at(vars(first_day_mob, last_day_mob), lubridate::as_date)
 
 # Subnational Deaths Data -------------------------------------------------
 
 subnat_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta")) %>%
   left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>%
   group_nest(countrycode, countrycode_string, sub_region, .key = "daily_data") %>%
-  inner_join(subnat_mob_data, by = c("countrycode_string", "sub_region"), suffix = c("_spread", "_mob"))
-  # full_join(subnat_mob_data, by = c("countrycode_string", "sub_region", "date")) %>%
-  # mutate(days_observed = map_int(daily_data, nrow)) %>%
-  # arrange(countrycode, sub_region) %>%
-  # left_join(wb_pop_data, by = c("countrycode_string", "sub_region")) # Only available for regions (not all) in Brazil, India, and China
+  inner_join(subnat_mob_data, by = c("countrycode_string", "sub_region"), suffix = c("_spread", "_mob")) %>%
+  mutate(
+    first_day_deaths = map(daily_data_spread, pull, date) %>% map_dbl(min, na.rm = TRUE) %>% lubridate::as_date(), # TODO There shouldn't be any NA dates
+    daily_data_spread = pmap(lst(daily_data_spread, first_day_mob, last_day_mob), ~ filter(..1, between(date, ..2, ..3))),
+    daily_data_mob = pmap(lst(daily_data_mob, first_day_deaths), ~ filter(..1, date >= ..2)),
+    daily_data = map2(daily_data_spread, daily_data_mob, right_join, by = "date")
+  ) %>%
+  select(-daily_data_mob, -daily_data_spread) %>%
+  mutate(days_observed = map_int(daily_data, nrow)) %>%
+  arrange(countrycode, sub_region) %>%
+  left_join(wb_pop_data, by = c("countrycode_string", "sub_region")) # Only available for regions (not all) in Brazil, India, and China
 
 # IFR ---------------------------------------------------------------------
 
@@ -113,8 +119,7 @@ time_to_death <- c(0, seq(1.5, by = 1, length.out = max(subnat_deaths_data$days_
 # Stan Data ---------------------------------------------------------------
 
 use_subnat_data <- subnat_data %>%
-  filter(!is.na(pop)) %>%
-  semi_join(subnat_mob_data, by = "countrycode_string") %>%
+  filter(!is.na(pop), days_observed > 0) %>%
   arrange(countrycode)
 
 stan_data <- lst(
