@@ -4,23 +4,34 @@ output: html_notebook
 ---
 
 ```{r setup}
+library(magrittr)
 library(tidyverse)
 library(haven)
+library(latex2exp)
+library(rstan)
+
+source(file.path("..", "util.R"))
+
+ggplot2::theme_set(theme_minimal())
 ```
 
-# Mobility Data
+# Looking at Data
+
+Just looking at what data is available.
+
+## Mobility Data
 
 ```{r}
 goog_mob_data <- read_csv(file.path("..", "data", "mobility", "Global_Mobility_Report.csv"), col_types = lst("sub_region_2" = col_character()))
 ```
 
-# IFR from Vollmer et al.
+## IFR from Vollmer et al.
 
 ```{r}
 popt_ifr <- read_csv(file.path("..", "..", "covid19model", "data", "popt_ifr.csv"))
 ```
 
-# Cleaned Data
+## Cleaned Data
 
 ```{r}
 natsubnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "master.dta")) %>% 
@@ -34,5 +45,73 @@ natsubnat_data %>% count(subregion)
 ```{r}
 subnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta"))
 ```
+
+# Analysis
+
+```{r}
+load(file.path("..", "data", "mobility", "results", "mob_results.RData"))
+```
+
+```{r}
+use_subnat_data %<>% 
+  mutate(
+    subnat_index = seq(n()),
+    daily_data = map(daily_data, mutate, day_index = seq(n()))
+  )
+
+subnat_results <- mob_fit %>% 
+  as.data.frame(pars = "R0") %>% # TODO update below steps if adding more than one parameter
+  mutate(iter_id = seq(n())) %>% 
+  pivot_longer(-iter_id, names_to = "param", values_to = "iter_value") %>% 
+  tidyr::extract(param, c("subnat_index"), ("\\[(\\d+)\\]"), convert = TRUE) %>% 
+  nest(iter_data = -subnat_index) %>% 
+  mutate(
+    quants = map(iter_data, quantilize, iter_value),
+    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+  ) %>% 
+  unnest(quants)
+
+day_results <- mob_fit %>% 
+  as.data.frame(pars = "Rt") %>% # TODO update below steps if adding more than one parameter 
+  mutate(iter_id = seq(n())) %>% 
+  pivot_longer(-iter_id, names_to = "param", values_to = "iter_value") %>% 
+  tidyr::extract(param, c("long_day_index"), ("\\[(\\d+)\\]"), convert = TRUE) %>% 
+  nest(iter_data = -long_day_index) %>% 
+  mutate(
+    countrycode_string = rep(use_subnat_data$countrycode_string, times = stan_data$days_observed),
+    sub_region = rep(use_subnat_data$sub_region, times = stan_data$days_observed),
+    quants = map(iter_data, quantilize, iter_value),
+    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+  ) %>% 
+  unnest(quants) %>% 
+  nest(day_data = -c(countrycode_string, sub_region)) %>% 
+  mutate(
+    day_data = map(day_data, mutate, day_index = seq_along(long_day_index)) %>% 
+      map(select, -long_day_index),
+  ) 
+
+use_subnat_data %<>%
+  left_join(subnat_results, by = "subnat_index") %>% 
+  left_join(day_results, by = c("countrycode_string", "sub_region")) %>% 
+  mutate(
+    daily_data = map2(daily_data, day_data, left_join, by = "day_index")
+  ) %>% 
+  select(-day_data)
+```
+
+```{r R0-plot}
+use_subnat_data %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_0"))
+```
+
+```{r Rt-plot}
+use_subnat_data %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_0"))
+```
+
 
 
