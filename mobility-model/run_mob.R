@@ -222,6 +222,8 @@ stan_data <- lst(
     pull(new_deaths),
 )
 
+cat(str_glue("Running model with {stan_data$N_national} countries and {stan_data$N_subnational} total subnational entities."))
+
 # Sampling ----------------------------------------------------------------
 
 mob_model <- stan_model(file.path("mobility-model", "mobility.stan"))
@@ -230,8 +232,12 @@ mob_fit <- mob_model %>%
   sampling(
     data = stan_data,
     chains = 8,
-    iter = 4000,
+    iter = 8000,
     control = lst(
       adapt_delta = 0.9,
     )
   )
+
+# Save --------------------------------------------------------------------
+
+save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", "mob_results.RData"))
