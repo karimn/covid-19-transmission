@@ -84,7 +84,7 @@ parameters {
   // Linear model parameters
   vector[num_coef] beta_toplevel;
 
-  vector<lower = 0>[num_coef] beta_national_sd;
+  vector<lower = 0>[num_coef] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
   matrix[num_coef, N_national] beta_national_raw; // Uncentered for now to avoid divergence
 
   matrix<lower = 0>[num_coef, N_national] beta_subnational_sd;
@@ -174,7 +174,7 @@ model {
   ifr_noise ~ normal(1, 0.1);
 
   tau_impute_cases ~ exponential(0.03);
-  imputed_cases ~ exponential(1 / tau_impute_cases); // TODO imputed cases should vary by subnational unit
+  imputed_cases ~ exponential(1 / tau_impute_cases);
 
   beta_toplevel ~ normal(0, 0.5);
   beta_national_sd ~ normal(0, 0.5);
@@ -197,7 +197,8 @@ model {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
 
-        deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end], overdisp_deaths[curr_subnat_pos]);
+        deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
+                                                                                 overdisp_deaths[curr_subnat_pos]);
 
         days_pos = days_end + 1;
       }
