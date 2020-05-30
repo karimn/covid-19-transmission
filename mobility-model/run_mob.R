@@ -129,7 +129,7 @@ subnat_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis",
   filter(is.finite(first_deathgte10_day)) %>% # Only keep subnational units where cumulative reaches deaths >=10 (using is.finite() because is.na() doesn't work)
   inner_join(subnat_mob_data, by = c("countrycode_string", "sub_region"), suffix = c("_spread", "_mob")) %>% # This restricts us to data with corresponding mobility datda
   mutate(
-    last_effective_observed_day = min(last_observed_spread_day, last_day_mob), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
+    last_effective_observed_day = pmin(last_observed_spread_day, last_day_mob), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
     num_days_observed = last_effective_observed_day - first_infection_seeding_day + 1,
 
     daily_data = map2(daily_data_spread, daily_data_mob, full_join, by = "date") %>%
@@ -178,12 +178,13 @@ use_subnat_data %>%
   geom_point(aes(first_infection_seeding_day)) +
   geom_point(aes(first_deathgte10_day + 1)) +
   geom_point(aes(last_effective_observed_day)) +
-  ggrepel::geom_text_repel(aes(x = first_deathgte10_day + 1, label = "Epidemic"), nudge_y = 0.25) +
-  ggrepel::geom_text_repel(aes(x = first_infection_seeding_day, label = "First Seeding"), nudge_y = 0.25) +
-  ggrepel::geom_text_repel(aes(x = last_effective_observed_day, label = "Last Effective Observation"), nudge_y = 0.25) +
+  ggrepel::geom_text_repel(aes(x = first_deathgte10_day + 1, label = "Epidemic"), nudge_y = 0.25, size = 3.5) +
+  ggrepel::geom_text_repel(aes(x = first_infection_seeding_day, label = "First Seeding"), nudge_y = 0.25, size = 3.5) +
+  ggrepel::geom_text_repel(aes(x = last_effective_observed_day, label = "Last Effective Observation"), nudge_y = 0.25, size = 3.5) +
   geom_linerange(aes(xmin = first_infection_seeding_day, xmax = first_deathgte10_day), linetype = "dashed") +
   scale_color_discrete("") +
-  labs(x = "", y = "") +
+  labs(x = "", y = "",
+       caption = "Grey bars: range of mobility data. Black lines: range of infection/deaths data.") +
   facet_wrap(vars(countrycode_string), ncol = 1) +
   theme_minimal()
 
