@@ -40,6 +40,10 @@ transformed data {
   int D_total = sum(total_days);
   int max_days_observed = max(days_observed);
 
+  // int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
+  // int total_num_likelihood_days = sum(num_likelihood_days);
+  // int likelihood_day_idx[total_num_likelihood_days];
+
   real gen_factor_alpha = 1 / (0.62^2);          // alpha = 1 / tau^2;
   real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
 
@@ -58,6 +62,17 @@ transformed data {
       gen_factor[day_index] = gamma_cdfs[day_index] - gamma_cdfs[day_index - 1];
     }
   }
+
+  /*{
+    int lkh_pos = 1;
+
+    for (subnat_index in 1:N) {
+      for (lkh_day_index in 1:num_likelihood_days[subnat_index]) {
+        likelihood_day_idx[lkh_pos] = start_epidemic_offset + lkh_day_index - 1;
+        lkh_pos += 1;
+      }
+    }
+  }*/
 }
 
 parameters {
