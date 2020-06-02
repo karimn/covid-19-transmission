@@ -129,7 +129,7 @@ clean_missing_spread <- function(daily_data, first_observed_death) {
     daily_data %>%
       mutate(
         cum_deaths = if_else(date < first_observed_death, 0, cum_deaths),
-        new_deaths = cum_deaths - lag(cum_deaths, default = 0),
+        new_deaths = max(cum_deaths - lag(cum_deaths, default = 0), 0) # TODO remove the max() part when data cleaning is fixed
       )
   } else return(daily_data)
 }
