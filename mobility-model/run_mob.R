@@ -17,7 +17,7 @@ days_seeding <- 6
 days_to_forecast <- 0
 mob_formula <- ~ 0 + g_residential + g_transit_stations + average_mob
 
-# Population Data --------------------------------------------------------
+# Population Data For IFR -------------------------------------------------
 
 data(pop)
 
@@ -53,21 +53,21 @@ pop_data <- bind_rows(
 # Trying to get some subnational population sizes for some of the subnational entities in the main infection/deaths data.
 # So far really only using Brazil, India, and China.
 
-wb_pop_data <- read_csv(file.path("data", "population", "wb_subnational_pop.csv")) %>%
-  filter(fct_match(`Series Code`, "SP.POP.TOTL")) %>%
-  tidyr::extract(`Country Code`, c("countrycode_string", "sub_region"), "^(\\w{3})_[^\\.]+\\.(\\w{2})", remove = FALSE) %>%
-  mutate(
-    # For some subnational regions we don't have their code in the below infection/deaths data
-    sub_region = if_else(fct_match(countrycode_string, c("IND", "CHN")), str_extract(`Country Name`, "(?<=,\\s).+"), sub_region),
-    sub_region = str_remove(sub_region, "\\s+(Sheng|Shi)$")
-  ) %>%
-  select(-`Series Name`, -`Series Code`, -Level_attr, -`Country Name`, -`Country Code`) %>%
-  filter(!is.na(countrycode_string), !is.na(sub_region)) %>%
-  pivot_longer(-c(countrycode_string, sub_region), names_to = "year", names_pattern = "(^\\d{4})", values_to = "pop") %>%
-  group_by(countrycode_string, sub_region) %>%
-  filter(min_rank(year) == n()) %>% # Just the last year available
-  ungroup() %>%
-  select(-year)
+# wb_pop_data <- read_csv(file.path("data", "population", "wb_subnational_pop.csv")) %>%
+#   filter(fct_match(`Series Code`, "SP.POP.TOTL")) %>%
+#   tidyr::extract(`Country Code`, c("countrycode_string", "sub_region"), "^(\\w{3})_[^\\.]+\\.(\\w{2})", remove = FALSE) %>%
+#   mutate(
+#     # For some subnational regions we don't have their code in the below infection/deaths data
+#     sub_region = if_else(fct_match(countrycode_string, c("IND", "CHN")), str_extract(`Country Name`, "(?<=,\\s).+"), sub_region),
+#     sub_region = str_remove(sub_region, "\\s+(Sheng|Shi)$")
+#   ) %>%
+#   select(-`Series Name`, -`Series Code`, -Level_attr, -`Country Name`, -`Country Code`) %>%
+#   filter(!is.na(countrycode_string), !is.na(sub_region)) %>%
+#   pivot_longer(-c(countrycode_string, sub_region), names_to = "year", names_pattern = "(^\\d{4})", values_to = "pop") %>%
+#   group_by(countrycode_string, sub_region) %>%
+#   filter(min_rank(year) == n()) %>% # Just the last year available
+#   ungroup() %>%
+#   select(-year)
 
 # IFR ---------------------------------------------------------------------
 
@@ -89,72 +89,119 @@ ifr_adj <- pop_data %>%
 
 # Subnational Mobility Data -----------------------------------------------
 
-subnat_mob_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Data Collection", "Travel", "clean", "google_trends.dta")) %>%
-  select(countrycode_string, sub_region, date, starts_with("g_")) %>%
-  mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
-  group_nest(countrycode_string, sub_region, .key = "daily_data") %>%
-  mutate(
-    first_day_mob = map(daily_data, pull, date) %>% map_dbl(min),
-    last_day_mob = map(daily_data, pull, date) %>% map_dbl(max),
-  ) %>%
-  mutate_at(vars(first_day_mob, last_day_mob), lubridate::as_date) %>%
-  mutate(
-    daily_data = pmap(lst(daily_data, first_day_mob, last_day_mob), ~ complete(..1, date = seq.Date(from = ..2, to = ..3, by = "day"))),
-    # Try to impute mobility. Doesn't work if variable starts with NAs
-    daily_data = map(daily_data, ~ tryCatch(mutate_at(.x, vars(starts_with("g_")), zoo::na.locf), error = function(err) .x)) %>%
-      map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4)
-  )
+# subnat_mob_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Data Collection", "Travel", "clean", "google_trends.dta")) %>%
+#   select(countrycode_string, sub_region, date, starts_with("g_")) %>%
+#   mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
+#   group_nest(countrycode_string, sub_region, .key = "daily_data") %>%
+#   mutate(
+#     first_day_mob = map(daily_data, pull, date) %>% map_dbl(min),
+#     last_day_mob = map(daily_data, pull, date) %>% map_dbl(max),
+#   ) %>%
+#   mutate_at(vars(first_day_mob, last_day_mob), lubridate::as_date) %>%
+#   mutate(
+#     daily_data = pmap(lst(daily_data, first_day_mob, last_day_mob), ~ complete(..1, date = seq.Date(from = ..2, to = ..3, by = "day"))),
+#     # Try to impute mobility. Doesn't work if variable starts with NAs
+#     daily_data = map(daily_data, ~ tryCatch(mutate_at(.x, vars(starts_with("g_")), zoo::na.locf), error = function(err) .x)) %>%
+#       map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4)
+#   )
 
 # Subnational Deaths Data -------------------------------------------------
 
-subnat_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta")) %>%
+subnat_data_raw <- read_csv(file.path("data", "subnational.csv"))
+
+subnat_data <- subnat_data_raw %>%
+  rename(subnat_day_index = X1) %>%
   left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>% # Getting the countrycode
-  filter(!is.na(date)) %>%  # TODO this shouldn't happen in the clean data
-  group_nest(countrycode, countrycode_string, sub_region, .key = "daily_data") %>%
   mutate(
-    first_observed_spread_day = map(daily_data, pull, date) %>%
-      map_dbl(min) %>%
-      lubridate::as_date(),
+    all_mob_observed = select(., starts_with("g_")) %>%
+      map(is.na) %>%
+      transpose() %>%
+      map_lgl(~ all(unlist(.x))) %>%
+      not(),
+  )
 
-    last_observed_spread_day = map(daily_data, pull, date) %>%
-      map_dbl(max) %>%
-      lubridate::as_date(),
+temp_pop_data <- subnat_data %>%
+  distinct_at(vars(countrycode, sub_region, starts_with("pop"))) %>%
+  filter(!is.na(pop_ana))
 
-    first_deathgte10_day = map(daily_data, filter, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths
-      map_dbl(~ pull(.x, date) %>% min()) %>%
-      lubridate::as_date(),
+clean_missing_spread <- function(daily_data, first_observed_death) {
+  if (is.finite(first_observed_death)) {
+    daily_data %>%
+      mutate(
+        cum_deaths = if_else(date < first_observed_death, 0, cum_deaths),
+        new_deaths = cum_deaths - lag(cum_deaths, default = 0),
+      )
+  } else return(daily_data)
+}
 
-    first_infection_seeding_day = first_deathgte10_day - seeding_days_before_epidemic, # 30 days before the first day with >=10 deaths
-  ) %>%
-  filter(is.finite(first_deathgte10_day)) %>% # Only keep subnational units where cumulative reaches deaths >=10 (using is.finite() because is.na() doesn't work)
-  inner_join(subnat_mob_data, by = c("countrycode_string", "sub_region"), suffix = c("_spread", "_mob")) %>% # This restricts us to data with corresponding mobility datda
+clean_date_ranges <- function(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid) {
+  if (is_valid) {
+    daily_data %>%
+      filter(between(date, first_infection_seeding_day, last_effective_observed_day)) %>%
+      complete(date = seq.Date(from = first_infection_seeding_day, to = max(date), by = "day"))
+  } else {
+    return(daily_data)
+  }
+}
+
+subnat_data %<>%
+  select(-starts_with("pop")) %>%
+  group_by_at(vars(countrycode, countrycode_string, countryname, sub_region, starts_with("pop"))) %>%
+  group_nest(.key = "daily_data") %>%
+  left_join(temp_pop_data, by = c("countrycode", "sub_region")) %>%
   mutate(
-    last_effective_observed_day = pmin(last_observed_spread_day, last_day_mob), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
+    first_observed_death = map_dbl(daily_data,
+                                   ~ filter(.x, !is.na(cum_deaths)) %>%
+                                     pull(date) %>%
+                                     min()) %>%
+      lubridate::as_date(),
+
+    # daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
+
+    last_observed_death = map_dbl(daily_data,
+                                 ~ filter(.x, !is.na(cum_deaths)) %>%
+                                   pull(date) %>%
+                                   max()) %>%
+      lubridate::as_date(),
+
+    epidemic_start_date = map_dbl(daily_data,
+                                  ~ filter(.x, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths
+                                    pull(date) %>%
+                                    min()) %>%
+      lubridate::as_date() %>%
+      add(1), # The day after
+
+    first_infection_seeding_day = epidemic_start_date - 1 - seeding_days_before_epidemic, # 30 days before the first day with >=10 deaths
+
+    first_mob_day = map_dbl(daily_data,
+                       ~ filter(.x, all_mob_observed) %>%
+                         pull(date) %>%
+                         min()) %>%
+      lubridate::as_date(),
+
+    last_mob_day = map_dbl(daily_data,
+                       ~ filter(.x, all_mob_observed) %>%
+                         pull(date) %>%
+                         max()) %>%
+      lubridate::as_date(),
+
+    last_effective_observed_day = pmin(last_observed_death, last_mob_day), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
     num_days_observed = last_effective_observed_day - first_infection_seeding_day + 1,
-
-    daily_data = map2(daily_data_spread, daily_data_mob, full_join, by = "date") %>%
-      list(first_infection_seeding_day, last_effective_observed_day) %>%
-      pmap(~ filter(..1, between(date, ..2, ..3))) %>%  # Keep only from start of seeding to last effective observed day
-      map2(first_infection_seeding_day, ~ complete(.x, date = seq.Date(from = .y, to = max(date), by = "day"))) %>% # Fill in missing days
-      map2(last_observed_spread_day,
-           ~ mutate(.x, new_deaths = if_else(date <= .y, coalesce(new_deaths, 0), new_deaths))) %>% # Convert NAs to zeroes, before last observed day
-      # TODO The below imputation of missing mobility outcomes needs work. Making simplifying assumptions.
-      map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>%  # Any non-leading NAs are replaced with last prior non-NA
-      map(mutate_at, vars(starts_with("g_")), zoo::na.locf, fromLast = TRUE, na.rm = FALSE) %>%  # Any leading NAs are replaced with first successor non-NA
-      map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4), # Recalculate after handling NAs
-
-    num_missing_new_deaths = map(daily_data, filter, is.na(new_deaths)) %>% map_int(nrow),
-
-    num_missing_mob = map(daily_data, select, starts_with("g_")) %>% map(map, is.na) %>% map(reduce, ~ .x | .y) %>% map_int(sum)
   ) %>%
-  select(-daily_data_mob, -daily_data_spread) %>%
-  arrange(countrycode, sub_region) %>%
-  left_join(wb_pop_data, by = c("countrycode_string", "sub_region")) %>% # Only available for regions (not all) in Brazil, India, and China
+  mutate(
+    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day) & is.finite(epidemic_start_date),
+
+    daily_data = pmap(lst(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid), clean_date_ranges) %>%
+      map2(first_observed_death, clean_missing_spread) %>%
+      map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>% # Any non-leading NAs are replaced with last prior non-NA
+      map(mutate_at, vars(starts_with("g_")), coalesce, 0) %>%  # Any leading NAs are replaced with zeroes (as in Vollmer et al.)
+      map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4),
+  ) %>%
   left_join(ifr_adj, by = "countrycode")
 
 use_subnat_data <- subnat_data %>%
-  filter(!is.na(pop)) %>%
-  arrange(countrycode)
+  filter(is_valid,
+         fct_match(countryname, "Italy"))
 
 # Time to Death -----------------------------------------------------------
 
@@ -171,17 +218,17 @@ time_to_death <- c(0, seq(1.5, by = 1, length.out = max(use_subnat_data$num_days
 # Plot timelines ----------------------------------------------------------
 
 use_subnat_data %>%
-  mutate(sub_region = fct_reorder(sub_region, first_deathgte10_day)) %>%
+  mutate(sub_region = fct_reorder(sub_region, epidemic_start_date)) %>%
   ggplot(aes(y = sub_region)) +
-  geom_errorbar(aes(xmin = first_observed_spread_day, xmax = last_observed_spread_day), width = 0.25) +
-  geom_linerange(aes(xmin = first_day_mob, xmax = last_day_mob), size = 7, alpha = 0.15) +
+  geom_errorbar(aes(xmin = first_observed_death, xmax = last_observed_death), width = 0.25) +
+  geom_linerange(aes(xmin = first_mob_day, xmax = last_mob_day), size = 7, alpha = 0.15) +
   geom_point(aes(first_infection_seeding_day)) +
-  geom_point(aes(first_deathgte10_day + 1)) +
+  geom_point(aes(epidemic_start_date)) +
   geom_point(aes(last_effective_observed_day)) +
-  ggrepel::geom_text_repel(aes(x = first_deathgte10_day + 1, label = "Epidemic"), nudge_y = 0.25, size = 3.5) +
+  ggrepel::geom_text_repel(aes(x = epidemic_start_date, label = "Epidemic"), nudge_y = 0.25, size = 3.5) +
   ggrepel::geom_text_repel(aes(x = first_infection_seeding_day, label = "First Seeding"), nudge_y = 0.25, size = 3.5) +
   ggrepel::geom_text_repel(aes(x = last_effective_observed_day, label = "Last Effective Observation"), nudge_y = 0.25, size = 3.5) +
-  geom_linerange(aes(xmin = first_infection_seeding_day, xmax = first_deathgte10_day), linetype = "dashed") +
+  geom_linerange(aes(xmin = first_infection_seeding_day, xmax = epidemic_start_date - 1), linetype = "dashed") +
   scale_color_discrete("") +
   labs(x = "", y = "",
        caption = "Grey bars: range of mobility data. Black lines: range of infection/deaths data.") +
@@ -206,7 +253,7 @@ stan_data <- lst(
 
   time_to_death = time_to_death[1:total_days],
 
-  population = use_subnat_data$pop %>%
+  population = use_subnat_data$pop_ana %>%
     as.array(),
   mean_ifr = use_subnat_data$ifr %>%
     as.array(),
