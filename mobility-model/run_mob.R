@@ -279,7 +279,7 @@ mob_fit <- mob_model %>%
   sampling(
     data = stan_data,
     chains = 8,
-    iter = 8000,
+    iter = 3000,
     control = lst(
       adapt_delta = 0.9,
     )
@@ -287,4 +287,4 @@ mob_fit <- mob_model %>%
 
 # Save --------------------------------------------------------------------
 
-save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", "mob_results.RData"))
+save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", "ita_mob_results.RData"))

@@ -40,9 +40,11 @@ transformed data {
   int D_total = sum(total_days);
   int max_days_observed = max(days_observed);
 
-  // int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
-  // int total_num_likelihood_days = sum(num_likelihood_days);
-  // int likelihood_day_idx[total_num_likelihood_days];
+  int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
+  int total_num_likelihood_days = sum(num_likelihood_days);
+  int likelihood_day_idx[total_num_likelihood_days];
+
+  int day_subnat_idx[total_num_likelihood_days];
 
   real gen_factor_alpha = 1 / (0.62^2);          // alpha = 1 / tau^2;
   real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
@@ -63,16 +65,17 @@ transformed data {
     }
   }
 
-  /*{
+  {
     int lkh_pos = 1;
 
     for (subnat_index in 1:N) {
       for (lkh_day_index in 1:num_likelihood_days[subnat_index]) {
         likelihood_day_idx[lkh_pos] = start_epidemic_offset + lkh_day_index - 1;
+        day_subnat_idx[lkh_pos] = subnat_index;
         lkh_pos += 1;
       }
     }
-  }*/
+  }
 }
 
 parameters {
@@ -153,11 +156,11 @@ transformed parameters {
             mean_deaths[curr_day_pos] = 1e-15 * new_cases[curr_day_pos];
           }
 
-          if (mean_deaths[curr_day_pos] < 0) {
-            // print("mean_deaths[", curr_day_pos, "] = ", mean_deaths[curr_day_pos]);
-            // print("day_index = ", day_index);
-            // print("new_cases = ", new_cases[days_pos:(curr_day_pos - 1)]);
-          }
+          // if (mean_deaths[curr_day_pos] < 0) {
+          //   print("mean_deaths[", curr_day_pos, "] = ", mean_deaths[curr_day_pos]);
+          //   print("day_index = ", day_index);
+          //   print("new_cases = ", new_cases[days_pos:(curr_day_pos - 1)]);
+          // }
         }
 
         days_pos = days_end + 1;
@@ -186,25 +189,27 @@ model {
   R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
 
   if (fit_model) {
-    int subnat_pos = 1;
-    int days_pos = 1;
+    // int subnat_pos = 1;
+    // int days_pos = 1;
+    //
+    // for (country_index in 1:N_national) {
+    //   int num_subnat = N_subnational[country_index];
+    //   int subnat_end = subnat_pos + num_subnat - 1;
+    //
+    //   for (subnat_index in 1:N_subnational[country_index]) {
+    //     int curr_subnat_pos = subnat_pos + subnat_index - 1;
+    //     int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
+    //
+    //     deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
+    //                                                                              overdisp_deaths[curr_subnat_pos]);
+    //
+    //     days_pos = days_end + 1;
+    //   }
+    //
+    //   subnat_pos = subnat_end + 1;
+    // }
 
-    for (country_index in 1:N_national) {
-      int num_subnat = N_subnational[country_index];
-      int subnat_end = subnat_pos + num_subnat - 1;
-
-      for (subnat_index in 1:N_subnational[country_index]) {
-        int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
-
-        deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
-                                                                                 overdisp_deaths[curr_subnat_pos]);
-
-        days_pos = days_end + 1;
-      }
-
-      subnat_pos = subnat_end + 1;
-    }
+    deaths[likelihood_day_idx] ~ neg_binomial_2(mean_deaths[likelihood_day_idx], overdisp_deaths[day_subnat_idx]);
   }
 }
 
