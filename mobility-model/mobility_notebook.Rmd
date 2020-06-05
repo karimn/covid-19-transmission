@@ -43,3 +43,30 @@ use_subnat_data %>%
   geom_vline(xintercept = 1, linetype = "dotted") +
   labs(title = TeX("$R_{t,m}$ on the last day")) 
 ```
+
+## USA 
+
+```{r}
+load(file.path("..", "data", "mobility", "results", "usa_ifr_mob_results.RData"))
+```
+
+```{r R0-plot, fig.width=12}
+use_subnat_data %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r Rt-plot, fig.height=10, fig.width=12}
+use_subnat_data %>% 
+  plot_day_ci() +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r last-Rt-plot, fig.height=10, fig.width=10}
+use_subnat_data %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
