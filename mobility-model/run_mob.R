@@ -364,4 +364,8 @@ use_subnat_data %<>%
 
 # Save --------------------------------------------------------------------
 
-save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", str_c(script_options$output , ".RData")))
+save_file <- file.path("data", "mobility", "results", str_c(script_options$output , ".RData"))
+
+cat(str_glue("Saving results to {save_file}..."))
+save(mob_fit, stan_data, use_subnat_data, file = save_file)
+cat("done.\n")

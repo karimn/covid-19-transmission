@@ -15,51 +15,22 @@ source(file.path("..", "util.R"))
 ggplot2::theme_set(theme_minimal())
 ```
 
-# Looking at Data
-
-Just looking at what data is available.
-
-## Mobility Data
-
-```{r}
-goog_mob_data <- read_csv(file.path("..", "data", "mobility", "Global_Mobility_Report.csv"), col_types = lst("sub_region_2" = col_character()))
-```
-
-## IFR from Vollmer et al.
-
-```{r}
-popt_ifr <- read_csv(file.path("..", "..", "covid19model", "data", "popt_ifr.csv"))
-```
-
-## Cleaned Data
-
-```{r}
-natsubnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "master.dta")) %>% 
-  mutate_if(is.labelled, as_factor)
-```  
-
-```{r}
-natsubnat_data %>% count(subregion)
-```
-
-```{r}
-subnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data", "subspread.dta"))
-```
-
 # Analysis
 
+## Italy
+
 ```{r}
-load(file.path("..", "data", "mobility", "results", "ita_mob_results2.RData"))
+load(file.path("..", "data", "mobility", "results", "ita_ifr_mob_results.RData"))
 ```
 
-```{r R0-plot}
+```{r R0-plot, fig.width=10}
 use_subnat_data %>% 
   plot_subnat_ci() + 
   coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_0"))
 ```
 
-```{r Rt-plot, fig.height=10}
+```{r Rt-plot, fig.height=10, fig.width=10}
 use_subnat_data %>% 
   plot_day_ci() +
   geom_hline(yintercept = 1, linetype = "dotted")
@@ -67,7 +38,7 @@ use_subnat_data %>%
   # labs(title = TeX("R_0")) +
 ```
 
-```{r last-Rt-plot, fig.height=10}
+```{r last-Rt-plot, fig.height=10, fig.width=10}
 use_subnat_data %>% 
   plot_last_day_ci() +
   geom_vline(xintercept = 1, linetype = "dotted")
