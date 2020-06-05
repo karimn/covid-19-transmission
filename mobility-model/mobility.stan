@@ -10,8 +10,9 @@ functions {
     return result;
   }
 
-  real neg_binomial_partial_sum(int[] deaths, int start, int end, vector mean_deaths, int[] day_subnat_idx, vector overdisp_deaths) {
-    return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths[day_subnat_idx[start:end]]);
+  real neg_binomial_partial_sum(int[] deaths, int start, int end, vector mean_deaths, real overdisp_deaths) {
+    return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths);
+    // return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths[day_subnat_idx[start:end]]);
   }
 }
 
@@ -37,6 +38,12 @@ data {
   int<lower = 0> population[sum(N_subnational)];
   vector<lower = 0>[sum(N_subnational)] mean_ifr; // Not sure we'd have this at the subnational level. If we don't we change this to the national level.
   int<lower = 0> deaths[fit_model ? sum(days_observed) : 0];
+
+  // Hyperparameters
+
+  real hyperparam_tau_beta_toplevel;
+  real hyperparam_tau_beta_national_sd;
+  real hyperparam_tau_beta_subnational_sd;
 }
 
 transformed data {
@@ -117,14 +124,18 @@ parameters {
 }
 
 transformed parameters {
-  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
-  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
   vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
+
+  // Constrained version
+  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
   // vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
-  // vector<lower = 0>[D_total] Rt_adj = rep_vector(0, D_total);
-  vector[D_total] Rt = rep_vector(0, D_total);
-  vector[D_total] Rt_adj = rep_vector(0, D_total);
+  // vector<lower = 0>[D_total] Rt_adj = Rt;
   // row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
+
+  // Unconstrained version
+  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
+  vector[D_total] Rt = rep_vector(0, D_total);
+  vector[D_total] Rt_adj = Rt;
   row_vector[D_total] new_cases = rep_row_vector(0, D_total);
 
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
@@ -178,7 +189,8 @@ transformed parameters {
             real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_subnat_pos]);
 
             // if (adjust_factor < 0 || adjust_factor > 1) {
-            //   reject("adjust_factor not in [0, 1].");
+            //   reject("adjust_factor not in [0, 1]. adjust_factor = ", adjust_factor, ", cumulative_cases[1:(day_index - 1)] = ", cumulative_cases[1:(day_index - 1)],
+            //          ", new_cases[days_pos:(curr_day_pos - 1)] = ", new_cases[days_pos:(curr_day_pos - 1)]);
             // }
 
             // print("adjust_factor[", day_index , "] = ", adjust_factor);
@@ -232,15 +244,15 @@ model {
   tau_impute_cases ~ exponential(0.03);
   imputed_cases ~ exponential(1 / tau_impute_cases);
 
-  beta_toplevel ~ normal(0, 0.5);
+  beta_toplevel ~ normal(0, hyperparam_tau_beta_toplevel);
 
   if (hierarchical_mobility_model) {
     if (is_multinational) {
-      beta_national_sd ~ normal(0, 0.5);
+      beta_national_sd ~ normal(0, hyperparam_tau_beta_national_sd);
       to_vector(beta_national_raw) ~ std_normal();
     }
 
-    to_vector(beta_subnational_sd) ~ normal(0, 0.5);
+    to_vector(beta_subnational_sd) ~ normal(0, hyperparam_tau_beta_subnational_sd);
     to_vector(beta_subnational_raw) ~ std_normal();
   }
 
@@ -250,6 +262,7 @@ model {
 
   if (fit_model) {
     // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, day_subnat_idx, overdisp_deaths);
+    // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, overdisp_deaths);
 
     int subnat_pos = 1;
     int days_pos = 1;
@@ -276,4 +289,6 @@ model {
 
 generated quantities {
   // Forecasting
+
 }
+
