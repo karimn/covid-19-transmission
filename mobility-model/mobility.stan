@@ -57,6 +57,12 @@ transformed data {
   int max_days_observed = max(days_observed) + days_to_forecast;
   int is_multinational = N_national > 1;
 
+  real toplevel_R0_mean = 3.28;
+  real toplevel_R0_sd = 0.5;
+
+  real toplevel_log_R0_sd = sqrt(log((toplevel_R0_sd^2 / toplevel_R0_mean^2) + 1));
+  real toplevel_log_R0_mean = log(toplevel_R0_mean) - (toplevel_log_R0_sd^2 / 2);
+
   int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
   int total_num_likelihood_days = sum(num_likelihood_days);
   int likelihood_day_idx[total_num_likelihood_days];
