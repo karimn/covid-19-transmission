@@ -1,7 +1,7 @@
 #!/usr/bin/Rscript
 
 "Usage:
-  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations>]
+  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --cmdstan]
 
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
@@ -9,15 +9,14 @@ Options:
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob_results]
   --no-partial-pooling  Do not use a hierarchical model
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
+  --cmdstan  Use {cmdstanr} instead of {rstan}
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit ita")
+  docopt::docopt(opt_desc, "fit ita --cmdstan")
 } else {
   docopt::docopt(opt_desc)
 }
-
-use_cmdstan <- FALSE
 
 library(magrittr)
 library(tidyverse)
@@ -29,7 +28,7 @@ script_options %<>%
   modify_at("country-code", str_to_upper)
   # modify_at(c(), as.numeric)
 
-if (use_cmdstan) {
+if (script_options$cmdstan) {
   library(cmdstanr)
 } else {
   library(rstan)
@@ -38,15 +37,7 @@ if (use_cmdstan) {
 }
 
 source("util.R")
-
-# Constants ---------------------------------------------------------------
-
-min_deaths_day_before_epidemic <- 10
-seeding_days_before_epidemic <- 30
-start_epidemic_offset <- seeding_days_before_epidemic + 1
-days_seeding <- 6
-days_to_forecast <- 0
-mob_formula <- ~ 0 + g_residential + g_transit_stations + average_mob
+source(file.path("mobility-model", "constants.R"))
 
 # Population Data For IFR -------------------------------------------------
 
@@ -114,97 +105,9 @@ ita_ifr_data <- read_csv(file.path("data", "population", "ita_ifr.csv")) %>%
 
 # Subnational Deaths Data -------------------------------------------------
 
-subnat_data_raw <- read_csv(file.path("data", "subnational.csv"))
+subnat_data <- read_rds(file.path("data", "mobility", "cleaned_subnat_data.rds"))
 
-subnat_data <- subnat_data_raw %>%
-  rename(subnat_day_index = X1) %>%
-  left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>% # Getting the countrycode
-  mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
-  mutate(
-    all_mob_observed = select(., starts_with("g_")) %>%
-      map(is.na) %>%
-      transpose() %>%
-      map_lgl(~ all(unlist(.x))) %>%
-      not(),
-  )
-
-temp_pop_data <- subnat_data %>%
-  distinct_at(vars(countrycode, sub_region, starts_with("pop"))) %>%
-  filter(!is.na(pop_ana))
-
-clean_missing_spread <- function(daily_data, first_observed_death) {
-  if (is.finite(first_observed_death)) {
-    daily_data %>%
-      mutate(
-        cum_deaths = if_else(date < first_observed_death, 0, cum_deaths),
-        new_deaths = pmax(cum_deaths - lag(cum_deaths, default = 0), 0) # TODO remove the max() part when data cleaning is fixed
-      )
-  } else return(daily_data)
-}
-
-clean_date_ranges <- function(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid) {
-  if (is_valid) {
-    daily_data %>%
-      filter(between(date, first_infection_seeding_day, last_effective_observed_day)) %>%
-      complete(date = seq.Date(from = first_infection_seeding_day, to = max(date), by = "day"))
-  } else {
-    return(daily_data)
-  }
-}
-
-subnat_data %<>%
-  select(-starts_with("pop")) %>%
-  group_by_at(vars(countrycode, countrycode_string, countryname, sub_region, starts_with("pop"))) %>%
-  group_nest(.key = "daily_data") %>%
-  left_join(temp_pop_data, by = c("countrycode", "sub_region")) %>%
-  mutate(
-    first_observed_death = map_dbl(daily_data,
-                                   ~ filter(.x, !is.na(cum_deaths)) %>%
-                                     pull(date) %>%
-                                     min()) %>%
-      lubridate::as_date(),
-
-    last_observed_death = map_dbl(daily_data,
-                                 ~ filter(.x, !is.na(cum_deaths)) %>%
-                                   pull(date) %>%
-                                   max()) %>%
-      lubridate::as_date(),
-
-    epidemic_start_date = map_dbl(daily_data,
-                                  ~ filter(.x, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths
-                                    pull(date) %>%
-                                    min()) %>%
-      lubridate::as_date() %>%
-      add(1), # The day after
-
-    first_infection_seeding_day = epidemic_start_date - 1 - seeding_days_before_epidemic, # 30 days before the first day with >=10 deaths
-
-    first_mob_day = map_dbl(daily_data,
-                       ~ filter(.x, all_mob_observed) %>%
-                         pull(date) %>%
-                         min()) %>%
-      lubridate::as_date(),
-
-    last_mob_day = map_dbl(daily_data,
-                       ~ filter(.x, all_mob_observed) %>%
-                         pull(date) %>%
-                         max()) %>%
-      lubridate::as_date(),
-
-    last_effective_observed_day = pmin(last_observed_death, last_mob_day), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
-    num_days_observed = last_effective_observed_day - first_infection_seeding_day + 1,
-  ) %>%
-  mutate(
-    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day) & is.finite(epidemic_start_date),
-
-    daily_data = pmap(lst(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid), clean_date_ranges) %>%
-      map2(first_observed_death, clean_missing_spread) %>%
-      map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>% # Any non-leading NAs are replaced with last prior non-NA
-      map(mutate_at, vars(starts_with("g_")), coalesce, 0) %>%  # Any leading NAs are replaced with zeroes (as in Vollmer et al.)
-      map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4),
-  )
-
-if (fct_match(script_options$`country-code`, "ITA")) { # Using the same IFR as Vollmer et al. to check for differences in estimation
+if (length(script_options$`country-code`) == 1 && script_options$`country-code` == "ITA") { # Using the same IFR as Vollmer et al. to check for differences in estimation
   use_subnat_data <- subnat_data %>%
     filter(is_valid,
            fct_match(countrycode_string, script_options$`country-code`)) %>%
@@ -254,9 +157,19 @@ use_subnat_data %>%
 # Stan Data ---------------------------------------------------------------
 
 stan_data <- lst(
+  # Configuration
+
   fit_model = if (script_options$fit) 1 else 2,
   hierarchical_mobility_model = !script_options$`no-partial-pooling`,
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
+
+  # Hyperparameters
+
+  hyperparam_tau_beta_toplevel = 0.5,
+  hyperparam_tau_beta_national_sd = 1,
+  hyperparam_tau_beta_subnational_sd = 0.5,
+
+  # Data
 
   N_national = n_distinct(use_subnat_data$countrycode),
   N_subnational = use_subnat_data %>% count(countrycode) %>% pull(n) %>% as.array(),
@@ -289,12 +202,30 @@ stan_data <- lst(
   },
 )
 
-cat(str_glue("Running model with {stan_data$N_national} countries and {stan_data$N_subnational} total subnational entities.\n\n"))
+# make_initializer <- function(stan_data) {
+#   D_total <- sum(stan_data$days_observed) + stan_data$N_subnational * stan_data$days_to_forecast
+#
+#   function(chain_id) {
+#     lst(
+#       mean_deaths = rdunif(D_total, 2, 0),
+#       new_cases = rdunif(D_total, 2, 0),
+#       Rt = runif(D_total, 0, 0.25),
+#       Rt_adj = runif(D_total, 0, 0.25),
+#     )
+#   }
+# }
+
+cat(str_glue("Running model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
+use_subnat_data %>%
+  count(countryname) %$% {
+    cat(str_glue("\n\t{countryname}: {n} sub regions.\n\n"))
+  }
+cat("\n")
 
 # Sampling ----------------------------------------------------------------
 
-if (use_cmdstan) {
-  mob_model <- cmdstan_model(file.path("mobility-model", "mobility.stan"), cpp_options = list(stan_threads = FALSE))
+if (script_options$cmdstan) {
+  mob_model <- cmdstan_model(file.path("mobility-model", "mobility.stan"), cpp_options = list(stan_threads = TRUE))
   set_num_threads(3)
 
   mob_fit <- mob_model$sample(
@@ -320,6 +251,7 @@ if (use_cmdstan) {
       ),
       par = "mean_deaths",
       include = FALSE
+      # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
     )
 }
 
