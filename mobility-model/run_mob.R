@@ -13,7 +13,7 @@ Options:
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit ita --cmdstan")
+  docopt::docopt(opt_desc, "fit ita")
 } else {
   docopt::docopt(opt_desc)
 }
@@ -190,6 +190,8 @@ stan_data <- lst(
   design_matrix = use_subnat_data %>%
     unnest(daily_data) %>%
     modelr::model_matrix(mob_formula),
+    # select(1) %>% # Testing speed when all feature are (artificially) uncorrelated
+    # mutate(x2 = rnorm(n()), x3 = rnorm(n())),
 
   num_coef = ncol(design_matrix),
 
