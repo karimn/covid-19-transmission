@@ -9,10 +9,16 @@ functions {
 
     return result;
   }
+
+  real neg_binomial_partial_sum(int[] deaths, int start, int end, vector mean_deaths, int[] day_subnat_idx, vector overdisp_deaths) {
+    return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths[day_subnat_idx[start:end]]);
+  }
 }
 
 data {
   int<lower = 0, upper = 1> fit_model; // Fit vs prior-predict
+  int<lower = 0, upper = 1> hierarchical_mobility_model;
+  int<lower = 1, upper = 2> mobility_model_type;
 
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
@@ -34,23 +40,30 @@ data {
 }
 
 transformed data {
+  int MOBILITY_MODEL_INV_LOGIT = 1;
+  int MOBILITY_MODEL_EXPONENTIAL = 2;
+
   int N = sum(N_subnational);
   int D = sum(days_observed);
   int total_days[N] = add_array(days_observed, days_to_forecast);
   int D_total = sum(total_days);
-  int max_days_observed = max(days_observed);
+  int max_days_observed = max(days_observed) + days_to_forecast;
+  int is_multinational = N_national > 1;
 
-  // int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
-  // int total_num_likelihood_days = sum(num_likelihood_days);
-  // int likelihood_day_idx[total_num_likelihood_days];
+  int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
+  int total_num_likelihood_days = sum(num_likelihood_days);
+  int likelihood_day_idx[total_num_likelihood_days];
+  int day_subnat_idx[total_num_likelihood_days];
 
-  real gen_factor_alpha = 1 / (0.62^2);          // alpha = 1 / tau^2;
-  real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
-
-  // Need to discretize
-  vector<lower = 0>[max_days_observed] gen_factor;
+  vector<lower = 0>[max_days_observed] rev_time_to_death;
+  vector<lower = 0>[max_days_observed] rev_gen_factor;
 
   {
+    real gen_factor_alpha = 1 / (0.62^2);              // alpha = 1 / tau^2;
+    real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
+
+    // Need to discretize
+    vector[max_days_observed] gen_factor;
     vector[max_days_observed] gamma_cdfs;
 
     gamma_cdfs[1] = gamma_cdf(1.5, gen_factor_alpha, gen_factor_beta);
@@ -61,22 +74,29 @@ transformed data {
       gamma_cdfs[day_index] = gamma_cdf(day_index + 0.5, gen_factor_alpha, gen_factor_beta);
       gen_factor[day_index] = gamma_cdfs[day_index] - gamma_cdfs[day_index - 1];
     }
+
+    for (day_index in 1:max_days_observed) {
+      rev_time_to_death[day_index] = time_to_death[max_days_observed - day_index + 1];
+      rev_gen_factor[day_index] = gen_factor[max_days_observed - day_index + 1];
+    }
   }
 
-  /*{
+  {
     int lkh_pos = 1;
 
     for (subnat_index in 1:N) {
       for (lkh_day_index in 1:num_likelihood_days[subnat_index]) {
         likelihood_day_idx[lkh_pos] = start_epidemic_offset + lkh_day_index - 1;
+        day_subnat_idx[lkh_pos] = subnat_index;
         lkh_pos += 1;
       }
     }
-  }*/
+  }
 }
 
 parameters {
-  vector<lower = 0>[N] overdisp_deaths;
+  // vector<lower = 0>[N] overdisp_deaths;
+  real<lower = 0> overdisp_deaths;
 
   real<lower = 0> tau_impute_cases;
   vector<lower = 0>[N] imputed_cases;
@@ -84,22 +104,30 @@ parameters {
   // Linear model parameters
   vector[num_coef] beta_toplevel;
 
-  vector<lower = 0>[num_coef] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
-  matrix[num_coef, N_national] beta_national_raw; // Uncentered for now to avoid divergence
+  vector<lower = 0>[is_multinational && hierarchical_mobility_model ? num_coef : 0] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
+  matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw; // Uncentered for now to avoid divergence
 
-  matrix<lower = 0>[num_coef, N_national] beta_subnational_sd;
-  matrix[num_coef, N] beta_subnational_raw;
+  matrix<lower = 0>[hierarchical_mobility_model ? num_coef : 0, N_national] beta_subnational_sd;
+  matrix[hierarchical_mobility_model ? num_coef : 0, N] beta_subnational_raw;
 
   vector<lower = 0>[N] ifr_noise;
 
-  vector<lower = 0>[N] R0;
+  vector<lower = 0>[N] R0_raw;
   real<lower = 0> R0_sd;
 }
 
 transformed parameters {
-  vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
-  vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
-  row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
+  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
+  vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
+  // vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
+  // vector<lower = 0>[D_total] Rt_adj = rep_vector(0, D_total);
+  vector[D_total] Rt = rep_vector(0, D_total);
+  vector[D_total] Rt_adj = rep_vector(0, D_total);
+  // row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
+  row_vector[D_total] new_cases = rep_row_vector(0, D_total);
+
+  matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
   {
     int subnat_pos = 1;
@@ -107,51 +135,79 @@ transformed parameters {
 
     vector[N] ifr = mean_ifr .* ifr_noise;
 
-    matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
-
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
       int subnat_end = subnat_pos + num_subnat - 1;
 
-      beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
+      if (is_multinational && hierarchical_mobility_model) {
+        beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
+      }
 
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
+        int days_end = days_pos + days_observed[curr_subnat_pos] + days_to_forecast - 1;
 
-        vector[total_days[curr_subnat_pos]] cumulative_cases;
+        vector[total_days[curr_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_subnat_pos]);
+
+        vector[total_days[curr_subnat_pos]] mobility_effect = rep_vector(0, total_days[curr_subnat_pos]);
 
         // print("subnat_index = ", subnat_index);
 
-        beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
+        if (hierarchical_mobility_model) {
+          beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
+        }
 
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
 
-        Rt[days_pos:days_end] = 2 * R0[curr_subnat_pos] * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+        if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
+          mobility_effect = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+        } else {
+          mobility_effect = exp(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+        }
+
+        Rt[days_pos:days_end] = R0[curr_subnat_pos] * mobility_effect;
+
+        // print("Rt = ", Rt[days_pos:days_end]);
 
         for (day_index in 1:total_days[curr_subnat_pos]) {
           int curr_day_pos = days_pos + day_index - 1;
 
+          // print("curr_day_pos = ", curr_day_pos, " [index = ", day_index, "]");
+
           if (day_index > days_to_impute_cases) {
             real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_subnat_pos]);
+
+            // if (adjust_factor < 0 || adjust_factor > 1) {
+            //   reject("adjust_factor not in [0, 1].");
+            // }
 
             // print("adjust_factor[", day_index , "] = ", adjust_factor);
             // print("Rt[", day_index, "] = ", Rt[curr_day_pos]);
             // print("new_cases[:] = ", new_cases[days_pos:(curr_day_pos - 1)]);
             // print("gen_factor[:] = ", gen_factor[1:(day_index - 1)]);
 
-            new_cases[curr_day_pos] = adjust_factor * Rt[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * gen_factor[1:(day_index - 1)];
+            Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
+
+            // print("Rt_adj[", day_index, "] = ", Rt_adj[curr_day_pos]);
+
+            new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+          } else {
+            Rt_adj[curr_day_pos] = Rt[curr_day_pos];
           }
 
           // print("new_cases[", day_index, "] = ", new_cases[curr_day_pos]);
 
           cumulative_cases[day_index] = new_cases[curr_day_pos] + (day_index > 1 ? cumulative_cases[day_index - 1] : 0);
 
+          // print("cumulative_cases[", day_index, "] = ", cumulative_cases[day_index]);
+
           if (day_index > 1) {
-            mean_deaths[curr_day_pos] = ifr[curr_subnat_pos] * new_cases[days_pos:(curr_day_pos - 1)] * time_to_death[1:(day_index - 1)];
+            mean_deaths[curr_day_pos] = ifr[curr_subnat_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_time_to_death, day_index - 1);
           } else {
             mean_deaths[curr_day_pos] = 1e-15 * new_cases[curr_day_pos];
           }
+
+          // print("mean_deaths[", day_index, "] = ", mean_deaths[curr_day_pos]);
 
           if (mean_deaths[curr_day_pos] < 0) {
             // print("mean_deaths[", curr_day_pos, "] = ", mean_deaths[curr_day_pos]);
@@ -177,15 +233,24 @@ model {
   imputed_cases ~ exponential(1 / tau_impute_cases);
 
   beta_toplevel ~ normal(0, 0.5);
-  beta_national_sd ~ normal(0, 0.5);
-  to_vector(beta_national_raw) ~ std_normal();
-  to_vector(beta_subnational_sd) ~ normal(0, 0.5);
-  to_vector(beta_subnational_raw) ~ std_normal();
+
+  if (hierarchical_mobility_model) {
+    if (is_multinational) {
+      beta_national_sd ~ normal(0, 0.5);
+      to_vector(beta_national_raw) ~ std_normal();
+    }
+
+    to_vector(beta_subnational_sd) ~ normal(0, 0.5);
+    to_vector(beta_subnational_raw) ~ std_normal();
+  }
 
   R0_sd ~ normal(0, 0.5);
-  R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
+  R0_raw ~ std_normal(); // Again, not properly heirarchical.
+  // R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
 
   if (fit_model) {
+    // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, day_subnat_idx, overdisp_deaths);
+
     int subnat_pos = 1;
     int days_pos = 1;
 
@@ -198,12 +263,13 @@ model {
         int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
 
         deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
-                                                                                 overdisp_deaths[curr_subnat_pos]);
+                                                                                 overdisp_deaths);
+                                                                                 // overdisp_deaths[curr_subnat_pos]);
 
         days_pos = days_end + 1;
       }
 
-      subnat_pos = subnat_end + 1;
+      subnat_pos = subnat_end + days_to_forecast + 1;
     }
   }
 }

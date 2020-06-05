@@ -49,54 +49,7 @@ subnat_data <- read_dta(file.path("~", "Dropbox", "COVID-19", "Analysis", "Data"
 # Analysis
 
 ```{r}
-load(file.path("..", "data", "mobility", "results", "mob_results.RData"))
-```
-
-```{r}
-use_subnat_data %<>% 
-  mutate(
-    subnat_index = seq(n()),
-    daily_data = map(daily_data, mutate, day_index = seq(n()))
-  )
-
-subnat_results <- mob_fit %>% 
-  as.data.frame(pars = "R0") %>% # TODO update below steps if adding more than one parameter
-  mutate(iter_id = seq(n())) %>% 
-  pivot_longer(-iter_id, names_to = "param", values_to = "iter_value") %>% 
-  tidyr::extract(param, c("subnat_index"), ("\\[(\\d+)\\]"), convert = TRUE) %>% 
-  nest(iter_data = -subnat_index) %>% 
-  mutate(
-    quants = map(iter_data, quantilize, iter_value),
-    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
-  ) %>% 
-  unnest(quants)
-
-day_results <- mob_fit %>% 
-  as.data.frame(pars = "Rt") %>% # TODO update below steps if adding more than one parameter 
-  mutate(iter_id = seq(n())) %>% 
-  pivot_longer(-iter_id, names_to = "param", values_to = "iter_value") %>% 
-  tidyr::extract(param, c("long_day_index"), ("\\[(\\d+)\\]"), convert = TRUE) %>% 
-  nest(iter_data = -long_day_index) %>% 
-  mutate(
-    countrycode_string = rep(use_subnat_data$countrycode_string, times = stan_data$days_observed),
-    sub_region = rep(use_subnat_data$sub_region, times = stan_data$days_observed),
-    quants = map(iter_data, quantilize, iter_value),
-    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
-  ) %>% 
-  unnest(quants) %>% 
-  nest(day_data = -c(countrycode_string, sub_region)) %>% 
-  mutate(
-    day_data = map(day_data, mutate, day_index = seq_along(long_day_index)) %>% 
-      map(select, -long_day_index),
-  ) 
-
-use_subnat_data %<>%
-  left_join(subnat_results, by = "subnat_index") %>% 
-  left_join(day_results, by = c("countrycode_string", "sub_region")) %>% 
-  mutate(
-    daily_data = map2(daily_data, day_data, left_join, by = "day_index")
-  ) %>% 
-  select(-day_data)
+load(file.path("..", "data", "mobility", "results", "ita_mob_results2.RData"))
 ```
 
 ```{r R0-plot}
@@ -106,12 +59,18 @@ use_subnat_data %>%
   labs(title = TeX("R_0"))
 ```
 
-```{r Rt-plot}
+```{r Rt-plot, fig.height=10}
 use_subnat_data %>% 
-  plot_subnat_ci() + 
-  coord_cartesian(xlim = c(1, 4.5)) +
-  labs(title = TeX("R_0"))
+  plot_day_ci() +
+  geom_hline(yintercept = 1, linetype = "dotted")
+  # coord_cartesian(xlim = c(1, 4.5)) +
+  # labs(title = TeX("R_0")) +
 ```
 
-
-
+```{r last-Rt-plot, fig.height=10}
+use_subnat_data %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted")
+  # coord_cartesian(xlim = c(1, 4.5)) +
+  # labs(title = TeX("R_0")) +
+```

@@ -1,12 +1,43 @@
 #!/usr/bin/Rscript
 
+"Usage:
+  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations>]
+
+Options:
+  -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
+  -i <iterations>, --iter=<iterations>  Number of iterations [default: 2000]
+  -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob_results]
+  --no-partial-pooling  Do not use a hierarchical model
+  --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
+" -> opt_desc
+
+script_options <- if (interactive()) {
+  docopt::docopt(opt_desc, "fit ita")
+} else {
+  docopt::docopt(opt_desc)
+}
+
+use_cmdstan <- FALSE
+
 library(magrittr)
 library(tidyverse)
-library(rstan)
 library(wpp2019)
 
-options(mc.cores = max(1, parallel::detectCores()))
-rstan_options(auto_write = TRUE)
+script_options %<>%
+  modify_at(c("chains", "iter"), as.integer) %>%
+  modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
+  modify_at("country-code", str_to_upper)
+  # modify_at(c(), as.numeric)
+
+if (use_cmdstan) {
+  library(cmdstanr)
+} else {
+  library(rstan)
+  options(mc.cores = max(1, parallel::detectCores()))
+  rstan_options(auto_write = TRUE)
+}
+
+source("util.R")
 
 # Constants ---------------------------------------------------------------
 
@@ -50,25 +81,6 @@ pop_data <- bind_rows(
   summarise(pop = sum(pop * 1000)) %>%
   ungroup()
 
-# Trying to get some subnational population sizes for some of the subnational entities in the main infection/deaths data.
-# So far really only using Brazil, India, and China.
-
-# wb_pop_data <- read_csv(file.path("data", "population", "wb_subnational_pop.csv")) %>%
-#   filter(fct_match(`Series Code`, "SP.POP.TOTL")) %>%
-#   tidyr::extract(`Country Code`, c("countrycode_string", "sub_region"), "^(\\w{3})_[^\\.]+\\.(\\w{2})", remove = FALSE) %>%
-#   mutate(
-#     # For some subnational regions we don't have their code in the below infection/deaths data
-#     sub_region = if_else(fct_match(countrycode_string, c("IND", "CHN")), str_extract(`Country Name`, "(?<=,\\s).+"), sub_region),
-#     sub_region = str_remove(sub_region, "\\s+(Sheng|Shi)$")
-#   ) %>%
-#   select(-`Series Name`, -`Series Code`, -Level_attr, -`Country Name`, -`Country Code`) %>%
-#   filter(!is.na(countrycode_string), !is.na(sub_region)) %>%
-#   pivot_longer(-c(countrycode_string, sub_region), names_to = "year", names_pattern = "(^\\d{4})", values_to = "pop") %>%
-#   group_by(countrycode_string, sub_region) %>%
-#   filter(min_rank(year) == n()) %>% # Just the last year available
-#   ungroup() %>%
-#   select(-year)
-
 # IFR ---------------------------------------------------------------------
 
 age_metadata <- age_conv %>%
@@ -87,23 +99,18 @@ ifr_adj <- pop_data %>%
   summarize(ifr = sum(ifr * pop) / sum(pop)) %>%
   ungroup()
 
-# Subnational Mobility Data -----------------------------------------------
+# Alternative IFR from Vollmer et al. -------------------------------------
 
-# subnat_mob_data <- haven::read_dta(file.path("~", "Dropbox", "COVID-19", "Data Collection", "Travel", "clean", "google_trends.dta")) %>%
-#   select(countrycode_string, sub_region, date, starts_with("g_")) %>%
-#   mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
-#   group_nest(countrycode_string, sub_region, .key = "daily_data") %>%
-#   mutate(
-#     first_day_mob = map(daily_data, pull, date) %>% map_dbl(min),
-#     last_day_mob = map(daily_data, pull, date) %>% map_dbl(max),
-#   ) %>%
-#   mutate_at(vars(first_day_mob, last_day_mob), lubridate::as_date) %>%
-#   mutate(
-#     daily_data = pmap(lst(daily_data, first_day_mob, last_day_mob), ~ complete(..1, date = seq.Date(from = ..2, to = ..3, by = "day"))),
-#     # Try to impute mobility. Doesn't work if variable starts with NAs
-#     daily_data = map(daily_data, ~ tryCatch(mutate_at(.x, vars(starts_with("g_")), zoo::na.locf), error = function(err) .x)) %>%
-#       map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4)
-#   )
+italian_region_rename <- list(
+  "Friuli Venezia Giulia" = "Friuli Venezia-Giulia",
+  "P.A. Trento" = "Provincia Autonoma Trento",
+  "Valle d'Aosta" = "Valle D'Aosta"
+)
+
+ita_ifr_data <- read_csv(file.path("data", "population", "ita_ifr.csv")) %>%
+  select(-X1) %>%
+  rename(ifr = IFR, sub_region = state, pop_ana = total_pop) %>%
+  mutate(sub_region = fct_recode(sub_region, !!!italian_region_rename))
 
 # Subnational Deaths Data -------------------------------------------------
 
@@ -112,6 +119,7 @@ subnat_data_raw <- read_csv(file.path("data", "subnational.csv"))
 subnat_data <- subnat_data_raw %>%
   rename(subnat_day_index = X1) %>%
   left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>% # Getting the countrycode
+  mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
   mutate(
     all_mob_observed = select(., starts_with("g_")) %>%
       map(is.na) %>%
@@ -129,7 +137,7 @@ clean_missing_spread <- function(daily_data, first_observed_death) {
     daily_data %>%
       mutate(
         cum_deaths = if_else(date < first_observed_death, 0, cum_deaths),
-        new_deaths = max(cum_deaths - lag(cum_deaths, default = 0), 0) # TODO remove the max() part when data cleaning is fixed
+        new_deaths = pmax(cum_deaths - lag(cum_deaths, default = 0), 0) # TODO remove the max() part when data cleaning is fixed
       )
   } else return(daily_data)
 }
@@ -155,8 +163,6 @@ subnat_data %<>%
                                      pull(date) %>%
                                      min()) %>%
       lubridate::as_date(),
-
-    # daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
 
     last_observed_death = map_dbl(daily_data,
                                  ~ filter(.x, !is.na(cum_deaths)) %>%
@@ -196,19 +202,29 @@ subnat_data %<>%
       map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>% # Any non-leading NAs are replaced with last prior non-NA
       map(mutate_at, vars(starts_with("g_")), coalesce, 0) %>%  # Any leading NAs are replaced with zeroes (as in Vollmer et al.)
       map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4),
-  ) %>%
-  left_join(ifr_adj, by = "countrycode")
+  )
 
-use_subnat_data <- subnat_data %>%
-  filter(is_valid,
-         fct_match(countryname, "Italy"))
+if (fct_match(script_options$`country-code`, "ITA")) { # Using the same IFR as Vollmer et al. to check for differences in estimation
+  use_subnat_data <- subnat_data %>%
+    filter(is_valid,
+           fct_match(countrycode_string, script_options$`country-code`)) %>%
+    select(-pop_ana) %>%
+    left_join(ita_ifr_data, by = "sub_region")
+} else {
+  subnat_data %<>%
+    left_join(ifr_adj, by = "countrycode")
+
+  use_subnat_data <- subnat_data %>%
+    filter(is_valid,
+           fct_match(countrycode_string, script_options$`country-code`))
+}
 
 # Time to Death -----------------------------------------------------------
 
-quant_time_to_death <- ecdf(
-  EnvStats::rgammaAlt(1e6, 5.1, 0.86) + # infection-to-onset distribution
-    EnvStats::rgammaAlt(1e6, 18.8, 0.45) # onset-to-death distribution
-)
+time_to_death_draws <- EnvStats::rgammaAlt(1e6, 5.1, 0.86) + # infection-to-onset distribution
+                       EnvStats::rgammaAlt(1e6, 18.8, 0.45) # onset-to-death distribution
+
+quant_time_to_death <- ecdf(time_to_death_draws)
 
 time_to_death <- c(0, seq(1.5, by = 1, length.out = max(use_subnat_data$num_days_observed) + days_to_forecast)) %>%
   map_dbl(quant_time_to_death) %>%
@@ -237,10 +253,10 @@ use_subnat_data %>%
 
 # Stan Data ---------------------------------------------------------------
 
-# use_subnat_data %<>% slice(1:2) # Testing with one unit
-
 stan_data <- lst(
-  fit_model = 1,
+  fit_model = if (script_options$fit) 1 else 2,
+  hierarchical_mobility_model = !script_options$`no-partial-pooling`,
+  mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
 
   N_national = n_distinct(use_subnat_data$countrycode),
   N_subnational = use_subnat_data %>% count(countrycode) %>% pull(n) %>% as.array(),
@@ -264,27 +280,88 @@ stan_data <- lst(
 
   num_coef = ncol(design_matrix),
 
-  deaths = use_subnat_data %>%
-    unnest(daily_data) %>%
-    pull(new_deaths),
+  deaths = if (script_options$fit) {
+    use_subnat_data %>%
+      unnest(daily_data) %>%
+      pull(new_deaths)
+  } else {
+    array(dim = 0)
+  },
 )
 
-cat(str_glue("Running model with {stan_data$N_national} countries and {stan_data$N_subnational} total subnational entities."))
+cat(str_glue("Running model with {stan_data$N_national} countries and {stan_data$N_subnational} total subnational entities.\n\n"))
 
 # Sampling ----------------------------------------------------------------
 
-mob_model <- stan_model(file.path("mobility-model", "mobility.stan"))
+if (use_cmdstan) {
+  mob_model <- cmdstan_model(file.path("mobility-model", "mobility.stan"), cpp_options = list(stan_threads = FALSE))
+  set_num_threads(3)
 
-mob_fit <- mob_model %>%
-  sampling(
-    data = stan_data,
-    chains = 8,
-    iter = 2000,
-    control = lst(
-      adapt_delta = 0.9,
-    )
+  mob_fit <- mob_model$sample(
+    stan_data,
+    cores = script_options$chains,
+    chains = script_options$chains,
+    adapt_delta = 0.9,
+    iter_sampling = script_options$iter %/% 2,
+    iter_warmup = script_options$iter %/% 2,
+    init = 0
   )
+} else {
+  mob_model <- stan_model(file.path("mobility-model", "mobility.stan"))
+
+  mob_fit <- mob_model %>%
+    sampling(
+      data = stan_data,
+      iter = script_options$iter,
+      chains = script_options$chains,
+      control = lst(
+        adapt_delta = 0.95,
+        max_treedepth = 12
+      ),
+      par = "mean_deaths",
+      include = FALSE
+    )
+}
+
+# Extract Results ----------------------------------------------------------
+
+subnat_results <- mob_fit %>%
+  extract_subnat_results(c("R0"))
+
+day_results <- mob_fit %>%
+  as.array(par = c("Rt", "Rt_adj")) %>%
+  plyr::adply(3, diagnose) %>%
+  tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
+  mutate(
+    iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+    countrycode_string = rep(rep(use_subnat_data$countrycode_string, times = stan_data$days_observed), 2),
+    sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), 2),
+    quants = map(iter_data, quantilize, iter_value),
+    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+  ) %>%
+  unnest(quants) %>%
+  nest(day_data = -c(countrycode_string, sub_region)) %>%
+  mutate(
+    day_data = map(day_data,
+                   ~ group_by(., parameter) %>%
+                     mutate(day_index = seq_along(long_day_index)) %>%
+                     ungroup() %>%
+                     select(-long_day_index) %>%
+                     nest(param_results = -c(day_index)))
+  )
+
+use_subnat_data %<>%
+  mutate(
+    subnat_index = seq(n()),
+    daily_data = map(daily_data, mutate, day_index = seq(n()))
+  ) %>%
+  left_join(subnat_results, by = "subnat_index") %>%
+  left_join(day_results, by = c("countrycode_string", "sub_region")) %>%
+  mutate(
+    daily_data = map2(daily_data, day_data, left_join, by = "day_index")
+  ) %>%
+  select(-day_data)
 
 # Save --------------------------------------------------------------------
 
-save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", "ita_mob_results.RData"))
+save(mob_fit, stan_data, use_subnat_data, file = file.path("data", "mobility", "results", str_c(script_options$output , ".RData")))
