@@ -130,12 +130,13 @@ parameters {
 
   vector<lower = 0>[N] ifr_noise;
 
-  vector<lower = 0>[N] R0_raw;
+  // vector<lower = 0>[N] R0_raw;
+  vector<lower = 0>[N] R0;
   real<lower = 0> R0_sd;
 }
 
 transformed parameters {
-  vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
+  // vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
 
   // Constrained version
   vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
@@ -275,8 +276,8 @@ model {
   }
 
   R0_sd ~ normal(0, 0.5);
-  R0_raw ~ std_normal(); // Again, not properly heirarchical.
-  // R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
+  // R0_raw ~ std_normal(); // Again, not properly heirarchical.
+  R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
 
   if (fit_model) {
     // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, day_subnat_idx, overdisp_deaths);
