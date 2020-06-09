@@ -288,10 +288,10 @@ if (script_options$cmdstan) {
         adapt_delta = 0.95,
         max_treedepth = 12
       ),
+      # init = make_initializer(stan_data),
       par = "mean_deaths",
-      include = FALSE,
+      include = FALSE
       # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
-      init = make_initializer(stan_data)
     )
 }
 

@@ -139,16 +139,16 @@ transformed parameters {
   // vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
 
   // Constrained version
-  vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
-  vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
-  vector<lower = 0>[D_total] Rt_adj = Rt;
-  row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
+  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  // vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
+  // vector<lower = 0>[D_total] Rt_adj = Rt;
+  // row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
 
   // Unconstrained version
-  // vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
-  // vector[D_total] Rt = rep_vector(0, D_total);
-  // vector[D_total] Rt_adj = Rt;
-  // row_vector[D_total] new_cases = rep_row_vector(0, D_total);
+  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
+  vector[D_total] Rt = rep_vector(0, D_total);
+  vector[D_total] Rt_adj = Rt;
+  row_vector[D_total] new_cases = rep_row_vector(0, D_total);
 
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
