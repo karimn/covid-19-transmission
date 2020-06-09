@@ -14,7 +14,7 @@ Options:
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "prior ita -i 3000 --mobility-model-type=inv_logit")
+  docopt::docopt(opt_desc, "fit ita -i 3000 --mobility-model-type=inv_logit")
 } else {
   docopt::docopt(opt_desc)
 }
@@ -298,7 +298,7 @@ if (script_options$cmdstan) {
 # Extract Results ----------------------------------------------------------
 
 subnat_results <- mob_fit %>%
-  extract_subnat_results(c("log_R0", "subnational_effect_log_R0"))
+  extract_subnat_results(c("R0"))
 
 day_results <- mob_fit %>%
   extract_day_results(c("Rt", "Rt_adj", "mobility_effect"))
