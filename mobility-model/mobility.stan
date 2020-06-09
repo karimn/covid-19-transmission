@@ -41,9 +41,14 @@ data {
 
   // Hyperparameters
 
-  real hyperparam_tau_beta_toplevel;
-  real hyperparam_tau_beta_national_sd;
-  real hyperparam_tau_beta_subnational_sd;
+  real<lower = 0> hyperparam_tau_beta_toplevel;
+  real<lower = 0> hyperparam_tau_beta_national_sd;
+  real<lower = 0> hyperparam_tau_beta_subnational_sd;
+
+  real<lower = 0> hyperparam_tau_national_effect_log_R0_sd;
+  real<lower = 0> hyperparam_tau_subnational_effect_log_R0_sd;
+
+  real<lower = 0> hyperparam_toplevel_R0_sd;
 }
 
 transformed data {
@@ -58,9 +63,9 @@ transformed data {
   int is_multinational = N_national > 1;
 
   real toplevel_R0_mean = 3.28;
-  real toplevel_R0_sd = 0.5;
+  // real toplevel_R0_sd = 0.5;
 
-  real toplevel_log_R0_sd = sqrt(log((toplevel_R0_sd^2 / toplevel_R0_mean^2) + 1));
+  real toplevel_log_R0_sd = sqrt(log((hyperparam_toplevel_R0_sd^2 / toplevel_R0_mean^2) + 1));
   real toplevel_log_R0_mean = log(toplevel_R0_mean) - (toplevel_log_R0_sd^2 / 2);
 
   int num_likelihood_days[N] = add_array(days_observed, 1 - start_epidemic_offset);
@@ -125,26 +130,37 @@ parameters {
 
   vector<lower = 0>[N] ifr_noise;
 
-  vector<lower = 0>[N] R0_raw;
-  real<lower = 0> R0_sd;
+  real toplevel_log_R0;
+  vector[is_multinational ? N_national : 0] national_effect_log_R0_raw;
+  real<lower = 0> national_effect_log_R0_sd;
+  vector[N] subnational_effect_log_R0_raw;
+  vector<lower = 0>[N_national] subnational_effect_log_R0_sd;
 }
 
 transformed parameters {
-  vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
+  // vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
+  vector[N] log_R0 = rep_vector(toplevel_log_R0, N);
+  vector[N] subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N);
 
   // Constrained version
-  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
-  // vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
-  // vector<lower = 0>[D_total] Rt_adj = Rt;
-  // row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
+  vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
+  vector<lower = 0>[D_total] Rt_adj = Rt;
+  row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
 
   // Unconstrained version
-  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
-  vector[D_total] Rt = rep_vector(0, D_total);
-  vector[D_total] Rt_adj = Rt;
-  row_vector[D_total] new_cases = rep_row_vector(0, D_total);
+  // vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
+  // vector[D_total] Rt = rep_vector(0, D_total);
+  // vector[D_total] Rt_adj = Rt;
+  // row_vector[D_total] new_cases = rep_row_vector(0, D_total);
 
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
+
+  vector[D_total] mobility_effect = rep_vector(1, D_total);
+
+  if (is_multinational) {
+    log_R0 += national_effect_log_R0_raw * national_effect_log_R0_sd;
+  }
 
   {
     int subnat_pos = 1;
@@ -156,9 +172,14 @@ transformed parameters {
       int num_subnat = N_subnational[country_index];
       int subnat_end = subnat_pos + num_subnat - 1;
 
-      if (is_multinational && hierarchical_mobility_model) {
-        beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
+      if (is_multinational) {
+        if (hierarchical_mobility_model) {
+          beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
+        }
       }
+
+      subnational_effect_log_R0[subnat_pos:subnat_end] = subnational_effect_log_R0_raw[subnat_pos:subnat_end] * subnational_effect_log_R0_sd[country_index];
+      log_R0[subnat_pos:subnat_end] += subnational_effect_log_R0[subnat_pos:subnat_end];
 
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
@@ -166,7 +187,7 @@ transformed parameters {
 
         vector[total_days[curr_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_subnat_pos]);
 
-        vector[total_days[curr_subnat_pos]] mobility_effect = rep_vector(0, total_days[curr_subnat_pos]);
+        // vector[total_days[curr_subnat_pos]] mobility_effect = rep_vector(0, total_days[curr_subnat_pos]);
 
         // print("subnat_index = ", subnat_index);
 
@@ -177,12 +198,15 @@ transformed parameters {
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
-          mobility_effect = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
-        } else {
-          mobility_effect = exp(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
-        }
+          // vector[total_days[curr_subnat_pos]] mobility_effect = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+          mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
 
-        Rt[days_pos:days_end] = R0[curr_subnat_pos] * mobility_effect;
+          Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos]) * mobility_effect[days_pos:days_end];
+        } else {
+          mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+
+          Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+        }
 
         // print("Rt = ", Rt[days_pos:days_end]);
 
@@ -262,8 +286,19 @@ model {
     to_vector(beta_subnational_raw) ~ std_normal();
   }
 
-  R0_sd ~ normal(0, 0.5);
-  R0_raw ~ std_normal(); // Again, not properly heirarchical.
+  toplevel_log_R0 ~ normal(toplevel_log_R0_mean, toplevel_log_R0_sd);
+
+  if (is_multinational) {
+    national_effect_log_R0_raw ~ std_normal();
+  }
+
+  national_effect_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
+
+  subnational_effect_log_R0_raw ~ std_normal();
+  subnational_effect_log_R0_sd ~ normal(0, hyperparam_tau_subnational_effect_log_R0_sd);
+
+  // R0_sd ~ normal(0, 0.5);
+  // R0_raw ~ std_normal(); // Again, not properly heirarchical.
   // R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
 
   if (fit_model) {

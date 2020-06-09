@@ -20,11 +20,12 @@ ggplot2::theme_set(theme_minimal())
 ## Italy
 
 ```{r}
-load(file.path("..", "data", "mobility", "results", "ita_ifr_mob_results.RData"))
+# load(file.path("..", "data", "mobility", "results", "ita_ifr_mob_results.RData"))
+ita_results <- read_rds(file.path("..", "data", "mobility", "results", "ita_ifr_test_results.rds"))
 ```
 
 ```{r R0-plot, fig.width=10}
-use_subnat_data %>% 
+ita_results %>% 
   plot_subnat_ci() + 
   coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))

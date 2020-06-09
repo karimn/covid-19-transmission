@@ -18,11 +18,16 @@ diagnose <- function(cell, no_sim_diag = FALSE) {
   }
 }
 
-extract_subnat_results <- function(fit, par) {
+extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
   fit %>%
     as.array(par = par) %>%
     plyr::adply(3, diagnose) %>%
     tidyr::extract(parameters, c("parameter", "subnat_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
+    bind_rows(
+      filter(., str_detect(parameter, "log")) %>%
+        mutate(iter_data = map(iter_data, exp),
+               parameter = str_remove(parameter, "log_?"))
+    ) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
       quants = map(iter_data, quantilize, iter_value),
@@ -30,6 +35,45 @@ extract_subnat_results <- function(fit, par) {
     ) %>%
     unnest(quants) %>%
     nest(param_results = -subnat_index)
+}
+
+extract_day_results <- function(fit, par) {
+  fit %>%
+    as.array(par = par) %>%
+    plyr::adply(3, diagnose) %>%
+    tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      countrycode_string = rep(rep(use_subnat_data$countrycode_string, times = stan_data$days_observed), length(par)),
+      sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), length(par)),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants) %>%
+    nest(day_data = -c(countrycode_string, sub_region)) %>%
+    mutate(
+      day_data = map(day_data,
+                     ~ group_by(., parameter) %>%
+                       mutate(day_index = seq_along(long_day_index)) %>%
+                       ungroup() %>%
+                       select(-long_day_index) %>%
+                       nest(param_results = -c(day_index)))
+    )
+}
+
+extract_beta <- function(fit) {
+  fit %>%
+    as.array(par = "beta") %>%
+    plyr::adply(3, diagnose) %>%
+    tidyr::extract(parameters, c("coef_index", "subnat_index"), ("\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants) %>%
+    nest(param_results = -subnat_index)
+
 }
 
 plot_subnat_ci <- function(results) {

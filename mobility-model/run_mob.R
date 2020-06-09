@@ -2,6 +2,7 @@
 
 "Usage:
   run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --cmdstan]
+  run_mob prior [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations>]
 
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
@@ -13,7 +14,7 @@ Options:
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit ita")
+  docopt::docopt(opt_desc, "prior ita -i 3000 --mobility-model-type=inv_logit")
 } else {
   docopt::docopt(opt_desc)
 }
@@ -156,18 +157,25 @@ use_subnat_data %>%
 
 # Stan Data ---------------------------------------------------------------
 
+# TESTING TESTING
+use_subnat_data %<>% sample_n(2)
+
 stan_data <- lst(
   # Configuration
 
-  fit_model = if (script_options$fit) 1 else 2,
+  fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
   hierarchical_mobility_model = !script_options$`no-partial-pooling`,
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
 
   # Hyperparameters
 
-  hyperparam_tau_beta_toplevel = 0.5,
-  hyperparam_tau_beta_national_sd = 1,
-  hyperparam_tau_beta_subnational_sd = 0.5,
+  hyperparam_tau_beta_toplevel = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.1 else 0.5,
+  hyperparam_tau_beta_national_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.1 else 0.75,
+  hyperparam_tau_beta_subnational_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.05 else 0.5,
+
+  hyperparam_toplevel_R0_sd = 0.25,
+  hyperparam_tau_national_effect_log_R0_sd = 0.1,
+  hyperparam_tau_subnational_effect_log_R0_sd = 0.1,
 
   # Data
 
@@ -190,6 +198,7 @@ stan_data <- lst(
   design_matrix = use_subnat_data %>%
     unnest(daily_data) %>%
     modelr::model_matrix(mob_formula),
+    # mutate_all(~ (.x - mean(.x)) / sd(.x)), # Standardization
     # select(1) %>% # Testing speed when all feature are (artificially) uncorrelated
     # mutate(x2 = rnorm(n()), x3 = rnorm(n())),
 
@@ -204,18 +213,46 @@ stan_data <- lst(
   },
 )
 
-# make_initializer <- function(stan_data) {
-#   D_total <- sum(stan_data$days_observed) + stan_data$N_subnational * stan_data$days_to_forecast
-#
-#   function(chain_id) {
-#     lst(
-#       mean_deaths = rdunif(D_total, 2, 0),
-#       new_cases = rdunif(D_total, 2, 0),
-#       Rt = runif(D_total, 0, 0.25),
-#       Rt_adj = runif(D_total, 0, 0.25),
-#     )
-#   }
-# }
+make_initializer <- function(stan_data) {
+  N <- sum(stan_data$N_subnational)
+  D_total <- sum(stan_data$days_observed) + stan_data$N_subnational * stan_data$days_to_forecast
+  is_multinational <- stan_data$N_national > 1
+
+  function(chain_id) {
+    lst(
+      beta_toplevel = rnorm(stan_data$num_coef, 0, 0.1),
+      beta_national_sd = if (is_multinational) abs(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = c(0)),
+
+      beta_national_raw = if (is_multinational)
+        matrix(rnorm(stan_data$num_coef * stan_data$N_national, 0, 1), nrow = stan_data$num_coef, ncol = stan_data$N_national)
+      else array(dim = c(stan_data$num_coef, 0)),
+
+      beta_subnational_sd = if (stan_data$hierarchical_mobility_model)
+        matrix(abs(rnorm(stan_data$num_coef * stan_data$N_national, 0, 0.1)), nrow = stan_data$num_coef, ncol = stan_data$N_national)
+      else array(dim = c(0, stan_data$N_national)),
+
+      beta_subnational_raw = if (stan_data$hierarchical_mobility_model)
+        matrix(rnorm(stan_data$num_coef * N, 0, 1), nrow = stan_data$num_coef, ncol = N)
+      else array(dim = c(0, N)),
+
+      beta = matrix(rnorm(stan_data$num_coef * N, 0, 0.1), ncol = stan_data$num_coef, nrow = N),
+
+      mean_deaths = rdunif(D_total, 2, 0),
+      new_cases = rdunif(D_total, 2, 0),
+      log_R0 = rnorm(N, 0, 0.1),
+      Rt = runif(D_total, 0, 0.25),
+      Rt_adj = runif(D_total, 0, 0.25),
+
+      toplevel_log_R0 = rnorm(1, 0, 0.1),
+      national_effect_log_R0_raw = if (is_multinational) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
+      national_effect_log_R0_sd = abs(rnorm(stan_data$N_national, 0, 0.1)),
+      subnational_effect_log_R0_raw = rnorm(N, 0, 0.1),
+      subnational_effect_log_R0_sd = as.array(abs(rnorm(stan_data$N_national, 0, 0.075))),
+
+      ifr_noise = abs(rnorm(N, 0, 0.1)),
+    )
+  }
+}
 
 cat(str_glue("Running model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
@@ -252,37 +289,22 @@ if (script_options$cmdstan) {
         max_treedepth = 12
       ),
       par = "mean_deaths",
-      include = FALSE
+      include = FALSE,
       # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
+      init = make_initializer(stan_data)
     )
 }
 
 # Extract Results ----------------------------------------------------------
 
 subnat_results <- mob_fit %>%
-  extract_subnat_results(c("R0"))
+  extract_subnat_results(c("log_R0", "subnational_effect_log_R0"))
 
 day_results <- mob_fit %>%
-  as.array(par = c("Rt", "Rt_adj")) %>%
-  plyr::adply(3, diagnose) %>%
-  tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
-  mutate(
-    iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
-    countrycode_string = rep(rep(use_subnat_data$countrycode_string, times = stan_data$days_observed), 2),
-    sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), 2),
-    quants = map(iter_data, quantilize, iter_value),
-    mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
-  ) %>%
-  unnest(quants) %>%
-  nest(day_data = -c(countrycode_string, sub_region)) %>%
-  mutate(
-    day_data = map(day_data,
-                   ~ group_by(., parameter) %>%
-                     mutate(day_index = seq_along(long_day_index)) %>%
-                     ungroup() %>%
-                     select(-long_day_index) %>%
-                     nest(param_results = -c(day_index)))
-  )
+  extract_day_results(c("Rt", "Rt_adj", "mobility_effect"))
+
+beta_results <- mob_fit %>%
+  extract_beta()
 
 use_subnat_data %<>%
   mutate(
@@ -299,7 +321,9 @@ use_subnat_data %<>%
 # Save --------------------------------------------------------------------
 
 save_file <- file.path("data", "mobility", "results", str_c(script_options$output , ".RData"))
+save_results_file <- file.path("data", "mobility", "results", str_c(script_options$output , "_results.rds"))
 
-cat(str_glue("Saving results to {save_file}..."))
+cat(str_glue("Saving results to {save_file} and {save_results_file} ..."))
 save(mob_fit, stan_data, use_subnat_data, file = save_file)
+write_rds(use_subnat_data, save_results_file)
 cat("done.\n")
