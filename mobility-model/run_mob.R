@@ -7,14 +7,14 @@
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
   -i <iterations>, --iter=<iterations>  Number of iterations [default: 2000]
-  -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob_results]
+  -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
   --no-partial-pooling  Do not use a hierarchical model
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --cmdstan  Use {cmdstanr} instead of {rstan}
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "prior ita -i 3000 --mobility-model-type=inv_logit")
+  docopt::docopt(opt_desc, "prior ita -i 3000 --mobility-model-type=inv_logit -o ita_prior_mob")
 } else {
   docopt::docopt(opt_desc)
 }
@@ -158,7 +158,7 @@ use_subnat_data %>%
 # Stan Data ---------------------------------------------------------------
 
 # TESTING TESTING
-use_subnat_data %<>% sample_n(2)
+# use_subnat_data %<>% sample_n(2)
 
 stan_data <- lst(
   # Configuration
@@ -324,6 +324,6 @@ save_file <- file.path("data", "mobility", "results", str_c(script_options$outpu
 save_results_file <- file.path("data", "mobility", "results", str_c(script_options$output , "_results.rds"))
 
 cat(str_glue("Saving results to {save_file} and {save_results_file} ..."))
-save(mob_fit, stan_data, use_subnat_data, file = save_file)
+save(mob_fit, stan_data, file = save_file)
 write_rds(use_subnat_data, save_results_file)
 cat("done.\n")

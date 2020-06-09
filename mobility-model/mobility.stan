@@ -63,7 +63,6 @@ transformed data {
   int is_multinational = N_national > 1;
 
   real toplevel_R0_mean = 3.28;
-  // real toplevel_R0_sd = 0.5;
 
   real toplevel_log_R0_sd = sqrt(log((hyperparam_toplevel_R0_sd^2 / toplevel_R0_mean^2) + 1));
   real toplevel_log_R0_mean = log(toplevel_R0_mean) - (toplevel_log_R0_sd^2 / 2);
@@ -138,7 +137,6 @@ parameters {
 }
 
 transformed parameters {
-  // vector<lower = 0>[N] R0 = 3.28 + R0_raw * R0_sd;
   vector[N] log_R0 = rep_vector(toplevel_log_R0, N);
   vector[N] subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N);
 
@@ -187,10 +185,6 @@ transformed parameters {
 
         vector[total_days[curr_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_subnat_pos]);
 
-        // vector[total_days[curr_subnat_pos]] mobility_effect = rep_vector(0, total_days[curr_subnat_pos]);
-
-        // print("subnat_index = ", subnat_index);
-
         if (hierarchical_mobility_model) {
           beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
         }
@@ -198,7 +192,6 @@ transformed parameters {
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
-          // vector[total_days[curr_subnat_pos]] mobility_effect = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
           mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
 
           Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos]) * mobility_effect[days_pos:days_end];
@@ -208,53 +201,25 @@ transformed parameters {
           Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
         }
 
-        // print("Rt = ", Rt[days_pos:days_end]);
-
         for (day_index in 1:total_days[curr_subnat_pos]) {
           int curr_day_pos = days_pos + day_index - 1;
-
-          // print("curr_day_pos = ", curr_day_pos, " [index = ", day_index, "]");
 
           if (day_index > days_to_impute_cases) {
             real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_subnat_pos]);
 
-            // if (adjust_factor < 0 || adjust_factor > 1) {
-            //   reject("adjust_factor not in [0, 1]. adjust_factor = ", adjust_factor, ", cumulative_cases[1:(day_index - 1)] = ", cumulative_cases[1:(day_index - 1)],
-            //          ", new_cases[days_pos:(curr_day_pos - 1)] = ", new_cases[days_pos:(curr_day_pos - 1)]);
-            // }
-
-            // print("adjust_factor[", day_index , "] = ", adjust_factor);
-            // print("Rt[", day_index, "] = ", Rt[curr_day_pos]);
-            // print("new_cases[:] = ", new_cases[days_pos:(curr_day_pos - 1)]);
-            // print("gen_factor[:] = ", gen_factor[1:(day_index - 1)]);
-
             Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
-
-            // print("Rt_adj[", day_index, "] = ", Rt_adj[curr_day_pos]);
 
             new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
           } else {
             Rt_adj[curr_day_pos] = Rt[curr_day_pos];
           }
 
-          // print("new_cases[", day_index, "] = ", new_cases[curr_day_pos]);
-
           cumulative_cases[day_index] = new_cases[curr_day_pos] + (day_index > 1 ? cumulative_cases[day_index - 1] : 0);
-
-          // print("cumulative_cases[", day_index, "] = ", cumulative_cases[day_index]);
 
           if (day_index > 1) {
             mean_deaths[curr_day_pos] = ifr[curr_subnat_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_time_to_death, day_index - 1);
           } else {
             mean_deaths[curr_day_pos] = 1e-15 * new_cases[curr_day_pos];
-          }
-
-          // print("mean_deaths[", day_index, "] = ", mean_deaths[curr_day_pos]);
-
-          if (mean_deaths[curr_day_pos] < 0) {
-            // print("mean_deaths[", curr_day_pos, "] = ", mean_deaths[curr_day_pos]);
-            // print("day_index = ", day_index);
-            // print("new_cases = ", new_cases[days_pos:(curr_day_pos - 1)]);
           }
         }
 
@@ -296,10 +261,6 @@ model {
 
   subnational_effect_log_R0_raw ~ std_normal();
   subnational_effect_log_R0_sd ~ normal(0, hyperparam_tau_subnational_effect_log_R0_sd);
-
-  // R0_sd ~ normal(0, 0.5);
-  // R0_raw ~ std_normal(); // Again, not properly heirarchical.
-  // R0 ~ normal(3.28, R0_sd); // Again, not properly heirarchical.
 
   if (fit_model) {
     // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, day_subnat_idx, overdisp_deaths);
