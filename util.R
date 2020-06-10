@@ -100,7 +100,11 @@ plot_day_ci <- function(results) {
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.25) +
     labs(x = "", y = "") +
     facet_wrap(vars(sub_region), ncol = 2, strip.position = "left") +
-    theme(strip.placement = "outside", strip.text = element_text(angle = 0))
+    theme(
+      strip.placement = "outside",
+      strip.text = element_text(angle = 0),
+      axis.text.x = element_blank()
+    )
 }
 
 plot_last_day_ci <- function(results) {
