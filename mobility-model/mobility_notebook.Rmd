@@ -1,11 +1,13 @@
 ---
-title: "R Notebook"
+title: "Vollmer et al. Model"
 output: html_notebook
 ---
 
 ```{r setup}
 library(magrittr)
 library(tidyverse)
+library(cowplot)
+library(ggridges)
 library(haven)
 library(latex2exp)
 library(rstan)
@@ -15,31 +17,93 @@ source(file.path("..", "util.R"))
 ggplot2::theme_set(theme_minimal())
 ```
 
+# Prior Prediction
+
+```{r}
+ita_prior_results <- read_rds(file.path("data", "mobility", "results", "ita_mob_prior_results.rds"))
+```
+
+```{r, fig.width=10}
+plot_grid(
+  ita_prior_results %>% 
+    select(sub_region, param_results) %>% 
+    unnest(param_results) %>% 
+    filter(fct_match(parameter, "R0")) %>% 
+    select(sub_region, iter_data) %>% 
+    unnest(iter_data) %>% 
+    ggplot(aes(iter_value)) +
+    geom_density(aes(group = sub_region), color = alpha("black", 0.25)) +
+    geom_vline(xintercept = 3.28, linetype = "dotted") +
+    labs(title = TeX("Prior predicted $R_0$"), x = "") +
+    NULL,
+  
+  ita_prior_results %>% 
+    select(sub_region, param_results) %>% 
+    unnest(param_results) %>% 
+    filter(fct_match(parameter, "subnational_effect_R0")) %>% 
+    select(sub_region, iter_data) %>% 
+    unnest(iter_data) %>% 
+    ggplot(aes(iter_value * 3.28)) +
+    geom_density() +
+    geom_vline(xintercept = 3.28, linetype = "dotted") +
+    ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
+    scale_x_continuous("", breaks = seq(1, 5, 1)) +
+    labs(title = TeX("Prior predicted subnational effect on $R_0$")) +
+    NULL,
+  
+  ncol = 2
+)
+```
+
+
+```{r, fig.width=10}
+ita_prior_results %>% 
+    select(sub_region, daily_data) %>% 
+    unnest(daily_data) %>% 
+    select(sub_region, date, day_index, param_results) %>% 
+    unnest(param_results) %>% {
+      # plot_grid(
+        filter(., fct_match(parameter, "mobility_effect")) %>%
+          unnest(iter_data) %>%
+          ggplot(aes(iter_value)) +
+          geom_density(aes(group = sub_region), color = alpha("black", 0.3)) +
+          labs(title = "Prior predicted mobility effect.", x = "")
+
+        # filter(., fct_match(parameter, "Rt_adj")) %>% 
+        #   unnest(iter_data) %>% 
+        #   ggplot() +
+        #   geom_density_ridges(aes(x = iter_value, y = factor(day_index))) +
+        #   labs(title = TeX("Prior predicted adjusted $R_t$."), x = ""),
+        
+      #   ncol = 2
+      # )
+    }
+```
+
 # Analysis
 
 ## Italy
 
 ```{r}
-# load(file.path("..", "data", "mobility", "results", "ita_ifr_mob_results.RData"))
-ita_results <- read_rds(file.path("..", "data", "mobility", "results", "ita_ifr_test_results.rds"))
+ita_results <- read_rds(file.path("data", "mobility", "results", "ita_mob_results.rds"))
 ```
 
-```{r R0-plot, fig.width=10}
+```{r it-R0-plot, fig.width=10}
 ita_results %>% 
   plot_subnat_ci() + 
   coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))
 ```
 
-```{r Rt-plot, fig.height=10, fig.width=10}
-use_subnat_data %>% 
+```{r it-Rt-plot, fig.height=10, fig.width=10}
+ita_results %>% 
   plot_day_ci() +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
 
-```{r last-Rt-plot, fig.height=10, fig.width=10}
-use_subnat_data %>% 
+```{r it-last-Rt-plot, fig.height=4, fig.width=10}
+ita_results %>% 
   plot_last_day_ci() +
   geom_vline(xintercept = 1, linetype = "dotted") +
   labs(title = TeX("$R_{t,m}$ on the last day")) 
@@ -48,25 +112,25 @@ use_subnat_data %>%
 ## USA 
 
 ```{r}
-load(file.path("..", "data", "mobility", "results", "usa_ifr_mob_results.RData"))
+usa_results <- read_rds(file.path("data", "mobility", "results", "usa_mob_results.rds"))
 ```
 
-```{r R0-plot, fig.width=12}
-use_subnat_data %>% 
+```{r us-R0-plot, fig.width=12}
+usa_results %>% 
   plot_subnat_ci() + 
-  coord_cartesian(xlim = c(1, 4.5)) +
+  coord_cartesian(xlim = c(1, 5.5)) +
   labs(title = TeX("R_{0,m}"))
 ```
 
-```{r Rt-plot, fig.height=10, fig.width=12}
-use_subnat_data %>% 
+```{r us-Rt-plot, fig.height=10, fig.width=12}
+usa_results %>% 
   plot_day_ci() +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
 
-```{r last-Rt-plot, fig.height=10, fig.width=10}
-use_subnat_data %>% 
+```{r us-last-Rt-plot, fig.height=10, fig.width=10}
+usa_results%>% 
   plot_last_day_ci() +
   geom_vline(xintercept = 1, linetype = "dotted") +
   labs(title = TeX("$R_{t,m}$ on the last day")) 
