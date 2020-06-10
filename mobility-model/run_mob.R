@@ -1,8 +1,8 @@
 #!/usr/bin/Rscript
 
 "Usage:
-  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --cmdstan]
-  run_mob prior [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations>]
+  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --cmdstan --old-r0 --fixed-tau-beta]
+  run_mob prior [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --old-r0 --fixed-tau-beta]
 
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
@@ -11,10 +11,12 @@ Options:
   --no-partial-pooling  Do not use a hierarchical model
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --cmdstan  Use {cmdstanr} instead of {rstan}
+  --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
+  --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "prior ita -i 3000 --mobility-model-type=inv_logit -o ita_prior_mob")
+  docopt::docopt(opt_desc, "fit ita -i 2000")
 } else {
   docopt::docopt(opt_desc)
 }
@@ -158,7 +160,7 @@ use_subnat_data %>%
 # Stan Data ---------------------------------------------------------------
 
 # TESTING TESTING
-# use_subnat_data %<>% sample_n(2)
+# use_subnat_data %<>% sample_n(10)
 
 stan_data <- lst(
   # Configuration
@@ -166,16 +168,18 @@ stan_data <- lst(
   fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
   hierarchical_mobility_model = !script_options$`no-partial-pooling`,
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
+  use_log_R0 = !script_options$`old-r0`,
+  use_fixed_tau_beta = script_options$`fixed-tau-beta`,
 
   # Hyperparameters
 
   hyperparam_tau_beta_toplevel = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.1 else 0.5,
-  hyperparam_tau_beta_national_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.1 else 0.75,
-  hyperparam_tau_beta_subnational_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.05 else 0.5,
+  hyperparam_tau_beta_national_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.1 else 0.5,
+  hyperparam_tau_beta_subnational_sd = if (fct_match(script_options$`mobility-model-type`, "exponential")) 0.05 else 0.25,
 
   hyperparam_toplevel_R0_sd = 0.25,
   hyperparam_tau_national_effect_log_R0_sd = 0.1,
-  hyperparam_tau_subnational_effect_log_R0_sd = 0.1,
+  hyperparam_tau_subnational_effect_log_R0_sd = 0.08,
 
   # Data
 
@@ -239,15 +243,15 @@ make_initializer <- function(stan_data) {
 
       mean_deaths = rdunif(D_total, 2, 0),
       new_cases = rdunif(D_total, 2, 0),
-      log_R0 = rnorm(N, 0, 0.1),
+      log_R0 = if (stan_data$use_log_R0) rnorm(N, 0, 0.1) else array(dim = 0),
       Rt = runif(D_total, 0, 0.25),
       Rt_adj = runif(D_total, 0, 0.25),
 
       toplevel_log_R0 = rnorm(1, 0, 0.1),
-      national_effect_log_R0_raw = if (is_multinational) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
+      national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
       national_effect_log_R0_sd = abs(rnorm(stan_data$N_national, 0, 0.1)),
-      subnational_effect_log_R0_raw = rnorm(N, 0, 0.1),
-      subnational_effect_log_R0_sd = as.array(abs(rnorm(stan_data$N_national, 0, 0.075))),
+      subnational_effect_log_R0_raw = if (stan_data$use_log_R0) rnorm(N, 0, 0.1) else array(dim = 0),
+      subnational_effect_log_R0_sd = if (stan_data$use_log_R0) as.array(abs(rnorm(stan_data$N_national, 0, 0.075))) else array(dim = 0),
 
       ifr_noise = abs(rnorm(N, 0, 0.1)),
     )
@@ -272,9 +276,9 @@ if (script_options$cmdstan) {
     cores = script_options$chains,
     chains = script_options$chains,
     adapt_delta = 0.9,
+    # init = 0,
     iter_sampling = script_options$iter %/% 2,
-    iter_warmup = script_options$iter %/% 2,
-    init = 0
+    iter_warmup = script_options$iter %/% 2
   )
 } else {
   mob_model <- stan_model(file.path("mobility-model", "mobility.stan"))
@@ -288,14 +292,16 @@ if (script_options$cmdstan) {
         adapt_delta = 0.95,
         max_treedepth = 12
       ),
-      par = "mean_deaths",
-      include = FALSE,
       # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
-      init = make_initializer(stan_data)
+      init = make_initializer(stan_data),
+      par = "mean_deaths",
+      include = FALSE
     )
 }
 
 # Extract Results ----------------------------------------------------------
+
+cat("Extracting results...")
 
 subnat_results <- mob_fit %>%
   extract_subnat_results(c("log_R0", "subnational_effect_log_R0"))
@@ -317,6 +323,8 @@ use_subnat_data %<>%
     daily_data = map2(daily_data, day_data, left_join, by = "day_index")
   ) %>%
   select(-day_data)
+
+cat("done.\n")
 
 # Save --------------------------------------------------------------------
 
