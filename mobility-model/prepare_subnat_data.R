@@ -1,27 +1,34 @@
 #!/usr/bin/Rscript
 
-library(magrittr)
-library(tidyverse)
-
 "Usage:
   prepare_subnat_data <raw-data-file> <output-data-file>
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "") # Add the files here if running interactively
+  docopt::docopt(opt_desc, "data/cleaned.csv data/mobility/cleaned_subnat_data2.csv") # Add the files here if running interactively
 } else {
   docopt::docopt(opt_desc)
 }
+
+library(magrittr)
+library(tidyverse)
 
 source("constants.R")
 
 # Cleanup -----------------------------------------------------------------
 
-subnat_data_raw <- read_csv(script_options$`raw-data-file`)
+subnat_data_raw <- read_csv(
+  script_options$`raw-data-file`,
+  col_types = cols("subregion1_code" = col_character(),
+                   "subregion2_code" = col_character(),
+                   "subregion2_name" = col_character())
+)
 
 subnat_data <- subnat_data_raw %>%
   rename(subnat_day_index = X1) %>%
-  left_join(transmute(countrycode::codelist, countrycode_string = iso3c, countrycode = iso3n), by = "countrycode_string") %>% # Getting the countrycode
+  left_join(transmute(countrycode::codelist, country_code = iso2c, countrycode_iso3n = iso3n), by = "country_code") %>% # Getting the countrycode
+  rename_at(vars(matches("^(mobility|total)_")), str_replace_all, c("^mobility_" = "g_", "^total_" = "cum_")) %>%
+  rename_at(vars(matches("(confirmed|deceased)$")), str_replace_all, c("confirmed$" = "cases", "deceased$" = "deaths")) %>%
   mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
   mutate(
     all_mob_observed = select(., starts_with("g_")) %>%
@@ -31,9 +38,9 @@ subnat_data <- subnat_data_raw %>%
       not(),
   )
 
-temp_pop_data <- subnat_data %>%
-  distinct_at(vars(countrycode, sub_region, starts_with("pop"))) %>%
-  filter(!is.na(pop_ana))
+# temp_pop_data <- subnat_data %>%
+#   distinct_at(vars(country_code, subregion1_code, subregion2_code, starts_with("pop"))) %>%
+#   filter(!is.na(population))
 
 clean_missing_spread <- function(daily_data, first_observed_death) {
   if (is.finite(first_observed_death)) {
@@ -56,10 +63,10 @@ clean_date_ranges <- function(daily_data, first_infection_seeding_day, last_effe
 }
 
 subnat_data %<>%
-  select(-starts_with("pop")) %>%
-  group_by_at(vars(countrycode, countrycode_string, countryname, sub_region, starts_with("pop"))) %>%
+  # select(-starts_with("pop")) %>%
+  group_by_at(vars(starts_with("country"), starts_with("subregion"), key, aggregation_level, population)) %>%
   group_nest(.key = "daily_data") %>%
-  left_join(temp_pop_data, by = c("countrycode", "sub_region")) %>%
+  # left_join(temp_pop_data, by = c("country_code", "subregion1_code", "subregion2_code")) %>%
   mutate(
     first_observed_death = map_dbl(daily_data,
                                    ~ filter(.x, !is.na(cum_deaths)) %>%
@@ -98,13 +105,14 @@ subnat_data %<>%
     num_days_observed = last_effective_observed_day - first_infection_seeding_day + 1,
   ) %>%
   mutate(
-    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day) & is.finite(epidemic_start_date),
+    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day),
+    has_epidemic = is_valid & is.finite(epidemic_start_date),
 
-    daily_data = pmap(lst(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid), clean_date_ranges) %>%
+    daily_data = pmap(lst(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid = has_epidemic), clean_date_ranges) %>%
       map2(first_observed_death, clean_missing_spread) %>%
       map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>% # Any non-leading NAs are replaced with last prior non-NA
       map(mutate_at, vars(starts_with("g_")), coalesce, 0) %>%  # Any leading NAs are replaced with zeroes (as in Vollmer et al.)
-      map(mutate, average_mob = (g_grocery_pharma + g_parks + g_retail_recreation + g_workplaces) / 4),
+      map(mutate, average_mob = (g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 4),
   )
 
 write_rds(subnat_data, path = script_options$`output-data-file`)
