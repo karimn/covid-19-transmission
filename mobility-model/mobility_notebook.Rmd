@@ -34,7 +34,7 @@ ita_prior_results %>%
   geom_density(aes(group = sub_region), color = alpha("black", 0.25)) +
   geom_vline(xintercept = 3.28, linetype = "dotted") +
   labs(title = TeX("Prior predicted $R_0$"), x = "") +
-  NULL,
+  NULL
 ```
 
 
