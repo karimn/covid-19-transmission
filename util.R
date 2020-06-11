@@ -85,7 +85,7 @@ plot_subnat_ci <- function(results) {
     geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9), fatten = 1.5) +
     geom_point(aes(x = mean), size = 1.5, shape = 5) +
     labs(x = "", y = "") +
-    facet_wrap(vars(countrycode_string), ncol = 1)
+    facet_wrap(vars(countrycode_string), ncol = 1, scales = "free_y")
 }
 
 plot_day_ci <- function(results) {
@@ -99,7 +99,7 @@ plot_day_ci <- function(results) {
     geom_line(aes(y = per_0.5)) +
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.25) +
     labs(x = "", y = "") +
-    facet_wrap(vars(sub_region), ncol = 2, strip.position = "left") +
+    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
     theme(
       strip.placement = "outside",
       strip.text = element_text(angle = 0),
