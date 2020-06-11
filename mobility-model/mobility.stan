@@ -22,6 +22,8 @@ data {
   int<lower = 1, upper = 2> mobility_model_type;
   int<lower = 0, upper = 1> use_log_R0;
   int<lower = 0, upper = 1> use_fixed_tau_beta; // Use the same SD for all mobility effects -- homogenous partial pooling.
+  int<lower = 0, upper = 1> generate_post_prediction;
+  int<lower = 0, upper = 1> use_transformed_param_constraints;
 
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
@@ -145,17 +147,10 @@ transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
   vector[use_log_R0 ? N : 0] subnational_effect_log_R0;
 
-  // Constrained version
-  // vector<lower = 0>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
-  // vector<lower = 0>[D_total] Rt = rep_vector(0, D_total);
-  // vector<lower = 0>[D_total] Rt_adj = Rt;
-  // row_vector<lower = 0>[D_total] new_cases = rep_row_vector(0, D_total);
-
-  // Unconstrained version
-  vector[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
-  vector[D_total] Rt = rep_vector(0, D_total);
-  vector[D_total] Rt_adj = Rt;
-  row_vector[D_total] new_cases = rep_row_vector(0, D_total);
+  vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt = rep_vector(0, D_total);
+  vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
+  row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
 
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
@@ -163,10 +158,6 @@ transformed parameters {
 
   if (use_log_R0) {
     subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N);
-
-    if (is_multinational) {
-      log_R0 += national_effect_log_R0_raw * national_effect_log_R0_sd;
-    }
   }
 
   {
@@ -186,6 +177,10 @@ transformed parameters {
           } else {
             beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
           }
+        }
+
+        if (use_log_R0) {
+          log_R0[subnat_pos:subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
         }
       }
 
@@ -305,16 +300,36 @@ model {
                                                                                  overdisp_deaths);
                                                                                  // overdisp_deaths[curr_subnat_pos]);
 
-        days_pos = days_end + 1;
+        days_pos = days_end + days_to_forecast + 1;
       }
 
-      subnat_pos = subnat_end + days_to_forecast + 1;
+      subnat_pos = subnat_end + 1;
     }
   }
 }
 
 generated quantities {
-  // Forecasting
+  int<lower = 0> deaths_rep[fit_model && generate_post_prediction ? D : 0];
 
+  if (fit_model && generate_post_prediction) {
+    int subnat_pos = 1;
+    int days_pos = 1;
+
+    for (country_index in 1:N_national) {
+      int num_subnat = N_subnational[country_index];
+      int subnat_end = subnat_pos + num_subnat - 1;
+
+      for (subnat_index in 1:N_subnational[country_index]) {
+        int curr_subnat_pos = subnat_pos + subnat_index - 1;
+        int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
+
+        deaths_rep[days_pos:days_end] = neg_binomial_2_rng(mean_deaths[days_pos:days_end], overdisp_deaths);
+
+        days_pos = days_end + days_to_forecast + 1;
+      }
+
+      subnat_pos = subnat_end + 1;
+    }
+  }
 }
 

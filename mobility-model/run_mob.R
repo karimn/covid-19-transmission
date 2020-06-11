@@ -13,6 +13,7 @@ Options:
   --cmdstan  Use {cmdstanr} instead of {rstan}
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
+  --no-post-predict  Don't do posterior prediction
 " -> opt_desc
 
 script_options <- if (interactive()) {
@@ -170,6 +171,8 @@ stan_data <- lst(
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
+  generate_post_prediction = !script_options$`no-post-predict`,
+  use_transformed_param_constraints = 0,
 
   # Hyperparameters
 
@@ -249,7 +252,7 @@ make_initializer <- function(stan_data) {
 
       toplevel_log_R0 = rnorm(1, 0, 0.1),
       national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
-      national_effect_log_R0_sd = abs(rnorm(stan_data$N_national, 0, 0.1)),
+      national_effect_log_R0_sd = abs(rnorm(1, 0, 0.1)),
       subnational_effect_log_R0_raw = if (stan_data$use_log_R0) rnorm(N, 0, 0.1) else array(dim = 0),
       subnational_effect_log_R0_sd = if (stan_data$use_log_R0) as.array(abs(rnorm(stan_data$N_national, 0, 0.075))) else array(dim = 0),
 
@@ -294,8 +297,8 @@ if (script_options$cmdstan) {
       ),
       # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
       init = make_initializer(stan_data),
-      par = "mean_deaths",
-      include = FALSE
+      # par = "mean_deaths",
+      # include = FALSE
     )
 }
 
@@ -304,10 +307,16 @@ if (script_options$cmdstan) {
 cat("Extracting results...")
 
 subnat_results <- mob_fit %>%
-  extract_subnat_results(c("log_R0", "subnational_effect_log_R0"))
+  extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases"))
+
+day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
+
+if (!script_options$`no-post-predict`) {
+  day_param %<>% c("deaths_rep")
+}
 
 day_results <- mob_fit %>%
-  extract_day_results(c("Rt", "Rt_adj", "mobility_effect"))
+  extract_day_results(day_param)
 
 beta_results <- mob_fit %>%
   extract_beta()
