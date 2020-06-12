@@ -28,6 +28,10 @@ data {
   int<lower = 1, upper = min(days_observed)> days_to_impute_cases; 
   int<lower = 0> days_to_forecast;
 
+  //For now let's try only one region where cases can originate per country
+  int<lower = 1> travel_delay;
+  real<lower=0> import_pr_sd;
+
   // This is pi in the Vollmer model. Needs to be pre-computed empirically using ecdf(); 
   //it's the sum of two gamma distributions
   vector<lower = 0>[max(days_observed) + days_to_forecast] time_to_death; 
@@ -126,6 +130,8 @@ parameters {
 
   vector<lower = 0>[N] R0_raw;
   real<lower = 0> R0_sd;
+  
+  vector<lower = 0, upper = 1>[N] import_pr;
 }
 
 transformed parameters {
@@ -147,11 +153,13 @@ transformed parameters {
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
       int subnat_end = subnat_pos + num_subnat - 1;
+      real center_cases[total_days[subnat_pos]];
 
       if (is_multinational) {
         beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
       }
 
+      
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_subnat_pos] + days_to_forecast - 1;
@@ -161,9 +169,17 @@ transformed parameters {
         vector[total_days[curr_subnat_pos]] mobility_effect = rep_vector(0, total_days[curr_subnat_pos]);
 
         beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
-
-        new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = 
-          rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
+        
+          new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = 
+            rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
+        if(subnat_index == 1){
+            for(i in 1:days_to_impute_cases)
+              center_cases[i] = new_cases[days_pos + i - 1];
+        }
+        // Set to 0 for now
+        // else
+          // new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = 
+            // rep_row_vector(0, days_to_impute_cases);
 
         mobility_effect = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
 
@@ -174,11 +190,22 @@ transformed parameters {
           if (day_index > days_to_impute_cases) {
             real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_subnat_pos]);
             Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
+            
             new_cases[curr_day_pos] = 
               Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+            if(subnat_index == 1)
+              center_cases[day_index] = new_cases[curr_day_pos];
+            else
+              new_cases[curr_day_pos] = new_cases[curr_day_pos] + 
+                                        import_pr[subnat_index]*center_cases[day_index-travel_delay]*
+                                        (Rt_adj[curr_day_pos]/R0[curr_subnat_pos]); //fix this
+                                        
+            // print("subnat", subnat_index, "center_cases[", day_index, "] = ", center_cases[day_index]);
           } else {
             Rt_adj[curr_day_pos] = Rt[curr_day_pos];
           }
+          // print("center_cases[", day_index, "] = ", new_cases[curr_day_pos]);
+          
           cumulative_cases[day_index] = 
             new_cases[curr_day_pos] + (day_index > 1 ? cumulative_cases[day_index - 1] : 0);
           if (day_index > 1) {
@@ -208,6 +235,8 @@ model {
   imputed_cases ~ exponential(1 / tau_impute_cases);
 
   beta_toplevel ~ normal(0, hyperparam_tau_beta_toplevel);
+  
+  import_pr ~ normal(0, import_pr_sd);
 
   if (is_multinational) {
     beta_national_sd ~ normal(0, hyperparam_tau_beta_national_sd);

@@ -37,7 +37,7 @@ if (script_options$cmdstan) {
 }
 
 source("util.R")
-source(file.path("mobility-model", "constants.R"))
+# source(file.path("mobility-model", "constants.R"))
 
 # Population Data For IFR -------------------------------------------------
 
