@@ -5,3 +5,6 @@
 *.Rproj
 
 .Rprofile
+
+renv/
+temp/
