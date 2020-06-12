@@ -44,13 +44,13 @@ extract_day_results <- function(fit, par) {
     tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
-      countrycode_string = rep(rep(use_subnat_data$countrycode_string, times = stan_data$days_observed), length(par)),
+      country_code = rep(rep(use_subnat_data$country_code, times = stan_data$days_observed), length(par)),
       sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), length(par)),
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
     unnest(quants) %>%
-    nest(day_data = -c(countrycode_string, sub_region)) %>%
+    nest(day_data = -c(country_code, sub_region)) %>%
     mutate(
       day_data = map(day_data,
                      ~ group_by(., parameter) %>%

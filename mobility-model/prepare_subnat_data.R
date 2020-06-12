@@ -5,7 +5,7 @@
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "data/cleaned.csv data/mobility/cleaned_subnat_data2.csv") # Add the files here if running interactively
+  docopt::docopt(opt_desc, "data/cleaned.csv data/mobility/cleaned_subnat_data.csv") # Add the files here if running interactively
 } else {
   docopt::docopt(opt_desc)
 }
@@ -13,7 +13,9 @@ script_options <- if (interactive()) {
 library(magrittr)
 library(tidyverse)
 
-source("constants.R")
+root_path <- if (interactive()) "." else ".."
+
+source(file.path(root_path, "mobility-model", "constants.R"))
 
 # Cleanup -----------------------------------------------------------------
 
@@ -31,6 +33,9 @@ subnat_data <- subnat_data_raw %>%
   rename_at(vars(matches("(confirmed|deceased)$")), str_replace_all, c("confirmed$" = "cases", "deceased$" = "deaths")) %>%
   mutate_at(vars(starts_with("g_")), ~ . / 100) %>%
   mutate(
+    sub_region = case_when(aggregation_level == 1 ~ subregion1_name,
+                           aggregation_level == 2 ~ subregion2_name),
+
     all_mob_observed = select(., starts_with("g_")) %>%
       map(is.na) %>%
       transpose() %>%
@@ -38,16 +43,13 @@ subnat_data <- subnat_data_raw %>%
       not(),
   )
 
-# temp_pop_data <- subnat_data %>%
-#   distinct_at(vars(country_code, subregion1_code, subregion2_code, starts_with("pop"))) %>%
-#   filter(!is.na(population))
-
 clean_missing_spread <- function(daily_data, first_observed_death) {
   if (is.finite(first_observed_death)) {
     daily_data %>%
       mutate(
-        cum_deaths = if_else(date < first_observed_death, 0, cum_deaths),
-        new_deaths = pmax(cum_deaths - lag(cum_deaths, default = 0), 0) # TODO remove the max() part when data cleaning is fixed
+        cum_deaths = if_else(is.na(cum_deaths) & date < first_observed_death, 0, cum_deaths),
+        new_deaths = if_else(is.na(new_deaths), cum_deaths - lag(cum_deaths, default = 0), new_deaths),
+        cum_deaths = if_else(is.na(cum_deaths), cumsum(new_deaths), cum_deaths),
       )
   } else return(daily_data)
 }
@@ -63,22 +65,22 @@ clean_date_ranges <- function(daily_data, first_infection_seeding_day, last_effe
 }
 
 subnat_data %<>%
-  # select(-starts_with("pop")) %>%
-  group_by_at(vars(starts_with("country"), starts_with("subregion"), key, aggregation_level, population)) %>%
+  group_by_at(vars(starts_with("country"), starts_with("subregion"), sub_region, key, aggregation_level, population)) %>%
   group_nest(.key = "daily_data") %>%
-  # left_join(temp_pop_data, by = c("country_code", "subregion1_code", "subregion2_code")) %>%
   mutate(
     first_observed_death = map_dbl(daily_data,
-                                   ~ filter(.x, !is.na(cum_deaths)) %>%
+                                   ~ filter(.x, !is.na(cum_deaths) | !is.na(new_deaths)) %>%
                                      pull(date) %>%
                                      min()) %>%
       lubridate::as_date(),
 
     last_observed_death = map_dbl(daily_data,
-                                 ~ filter(.x, !is.na(cum_deaths)) %>%
+                                 ~ filter(.x, !is.na(cum_deaths) | !is.na(new_deaths)) %>%
                                    pull(date) %>%
                                    max()) %>%
       lubridate::as_date(),
+
+    daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
 
     epidemic_start_date = map_dbl(daily_data,
                                   ~ filter(.x, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths

@@ -1,8 +1,7 @@
 #!/usr/bin/Rscript
 
 "Usage:
-  run_mob fit [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --cmdstan --old-r0 --fixed-tau-beta]
-  run_mob prior [<country-code> ...] [--output=<output-name> --no-partial-pooling --mobility-model-type=<model-type> --chains=<chains> --iter=<iterations> --old-r0 --fixed-tau-beta]
+  run_mob (fit | prior) [<country-code> ...] [options]
 
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
@@ -14,11 +13,20 @@ Options:
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-post-predict  Don't do posterior prediction
+  --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
 " -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit ita -i 2000")
+  root_path <- "."
+
+  docopt::docopt(opt_desc, "fit us -i 1000 --rand-sample-subnat=10")
 } else {
+  root_path <- ".."
+
+  setwd(root_path)
+  source(file.path("renv", "activate.R"))
+  setwd("mobility-model")
+
   docopt::docopt(opt_desc)
 }
 
@@ -27,7 +35,7 @@ library(tidyverse)
 library(wpp2019)
 
 script_options %<>%
-  modify_at(c("chains", "iter"), as.integer) %>%
+  modify_at(c("chains", "iter", "rand-sample-subnat"), as.integer) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
   # modify_at(c(), as.numeric)
@@ -40,8 +48,9 @@ if (script_options$cmdstan) {
   rstan_options(auto_write = TRUE)
 }
 
-source("util.R")
-source(file.path("mobility-model", "constants.R"))
+
+source(file.path(root_path, "util.R"))
+source(file.path(root_path, "mobility-model", "constants.R"))
 
 # Population Data For IFR -------------------------------------------------
 
@@ -89,8 +98,7 @@ ifr_adj <- pop_data %>%
   filter(fct_match(year, "2020")) %>%
   left_join(age_metadata, by = "age_group") %>%
   select(-old_age_group, -name) %>%
-  rename(countrycode = country_code) %>%
-  group_by(countrycode) %>%
+  group_by(country_code) %>%
   summarize(ifr = sum(ifr * pop) / sum(pop)) %>%
   ungroup()
 
@@ -102,66 +110,80 @@ italian_region_rename <- list(
   "Valle d'Aosta" = "Valle D'Aosta"
 )
 
-ita_ifr_data <- read_csv(file.path("data", "population", "ita_ifr.csv")) %>%
+ita_ifr_data <- read_csv(file.path(root_path, "data", "population", "ita_ifr.csv")) %>%
   select(-X1) %>%
-  rename(ifr = IFR, sub_region = state, pop_ana = total_pop) %>%
+  rename(ifr = IFR, sub_region = state, population = total_pop) %>%
   mutate(sub_region = fct_recode(sub_region, !!!italian_region_rename))
 
 # Subnational Deaths Data -------------------------------------------------
 
-subnat_data <- read_rds(file.path("data", "mobility", "cleaned_subnat_data.rds"))
+subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
 
-if (length(script_options$`country-code`) == 1 && script_options$`country-code` == "ITA") { # Using the same IFR as Vollmer et al. to check for differences in estimation
-  use_subnat_data <- subnat_data %>%
-    filter(is_valid,
-           fct_match(countrycode_string, script_options$`country-code`)) %>%
-    select(-pop_ana) %>%
-    left_join(ita_ifr_data, by = "sub_region")
-} else {
+# if (length(script_options$`country-code`) == 1 && script_options$`country-code` == "IT") { # Using the same IFR as Vollmer et al. to check for differences in estimation
+#   use_subnat_data <- subnat_data %>%
+#     filter(has_epidemic,
+#            fct_match(country_code, "IT")) %>%
+#     select(-population) %>%
+#     left_join(ita_ifr_data, by = "sub_region")
+# } else {
   subnat_data %<>%
-    left_join(ifr_adj, by = "countrycode")
+    left_join(ifr_adj, by = c("countrycode_iso3n" = "country_code"))
 
   use_subnat_data <- subnat_data %>%
-    filter(is_valid,
-           fct_match(countrycode_string, script_options$`country-code`))
+      filter(has_epidemic,
+             is_empty(script_options$`country-code`) | fct_match(country_code, script_options$`country-code`))
+# }
+
+if (any(!use_subnat_data$is_valid)) {
+  warning("{nrow(filter(use_subnat_data, !is_valid))} rows found with invalid data.")
+}
+
+if (!is_empty(script_options$`rand-sample-subnat`)) {
+  if (n_distinct(use_subnat_data$country_code) > 1) {
+    stop("Only one country allowed with the --rand-sample-subnat option.")
+  }
+
+  use_subnat_data %<>%
+    sample_n(script_options$`rand-sample-subnat`)
 }
 
 # Time to Death -----------------------------------------------------------
 
-time_to_death_draws <- EnvStats::rgammaAlt(1e6, 5.1, 0.86) + # infection-to-onset distribution
-                       EnvStats::rgammaAlt(1e6, 18.8, 0.45) # onset-to-death distribution
-
-quant_time_to_death <- ecdf(time_to_death_draws)
-
-time_to_death <- c(0, seq(1.5, by = 1, length.out = max(use_subnat_data$num_days_observed) + days_to_forecast)) %>%
-  map_dbl(quant_time_to_death) %>%
-  subtract(lag(.)) %>%
-  discard(is.na)
+# time_to_death_draws <- EnvStats::rgammaAlt(1e8, 5.1, 0.86) + # infection-to-onset distribution
+#                        EnvStats::rgammaAlt(1e8, 18.8, 0.45) # onset-to-death distribution
+#
+# quant_time_to_death <- ecdf(time_to_death_draws)
+#
+# # time_to_death <- c(0, seq(1.5, by = 1, length.out = max(use_subnat_data$num_days_observed) + days_to_forecast)) %>%
+# time_to_death <- c(0, seq(1.5, by = 1, length.out = 365)) %>%
+#   map_dbl(quant_time_to_death) %>%
+#   subtract(lag(.)) %>%
+#   discard(is.na)
+#
+# write_rds(time_to_death, path = file.path(root_path, "data", "mobility", "time_to_death.rds"))
+time_to_death <- read_rds(file.path(root_path, "data", "mobility", "time_to_death.rds"))
 
 # Plot timelines ----------------------------------------------------------
 
-use_subnat_data %>%
-  mutate(sub_region = fct_reorder(sub_region, epidemic_start_date)) %>%
-  ggplot(aes(y = sub_region)) +
-  geom_errorbar(aes(xmin = first_observed_death, xmax = last_observed_death), width = 0.25) +
-  geom_linerange(aes(xmin = first_mob_day, xmax = last_mob_day), size = 7, alpha = 0.15) +
-  geom_point(aes(first_infection_seeding_day)) +
-  geom_point(aes(epidemic_start_date)) +
-  geom_point(aes(last_effective_observed_day)) +
-  ggrepel::geom_text_repel(aes(x = epidemic_start_date, label = "Epidemic"), nudge_y = 0.25, size = 3.5) +
-  ggrepel::geom_text_repel(aes(x = first_infection_seeding_day, label = "First Seeding"), nudge_y = 0.25, size = 3.5) +
-  ggrepel::geom_text_repel(aes(x = last_effective_observed_day, label = "Last Effective Observation"), nudge_y = 0.25, size = 3.5) +
-  geom_linerange(aes(xmin = first_infection_seeding_day, xmax = epidemic_start_date - 1), linetype = "dashed") +
-  scale_color_discrete("") +
-  labs(x = "", y = "",
-       caption = "Grey bars: range of mobility data. Black lines: range of infection/deaths data.") +
-  facet_wrap(vars(countrycode_string), ncol = 1) +
-  theme_minimal()
+# use_subnat_data %>%
+#   mutate(sub_region = fct_reorder(sub_region, epidemic_start_date)) %>%
+#   ggplot(aes(y = sub_region)) +
+#   geom_errorbar(aes(xmin = first_observed_death, xmax = last_observed_death), width = 0.25) +
+#   geom_linerange(aes(xmin = first_mob_day, xmax = last_mob_day), size = 7, alpha = 0.15) +
+#   geom_point(aes(first_infection_seeding_day)) +
+#   geom_point(aes(epidemic_start_date)) +
+#   geom_point(aes(last_effective_observed_day)) +
+#   ggrepel::geom_text_repel(aes(x = epidemic_start_date, label = "Epidemic"), nudge_y = 0.25, size = 3.5) +
+#   ggrepel::geom_text_repel(aes(x = first_infection_seeding_day, label = "First Seeding"), nudge_y = 0.25, size = 3.5) +
+#   ggrepel::geom_text_repel(aes(x = last_effective_observed_day, label = "Last Effective Observation"), nudge_y = 0.25, size = 3.5) +
+#   geom_linerange(aes(xmin = first_infection_seeding_day, xmax = epidemic_start_date - 1), linetype = "dashed") +
+#   scale_color_discrete("") +
+#   labs(x = "", y = "",
+#        caption = "Grey bars: range of mobility data. Black lines: range of infection/deaths data.") +
+#   facet_wrap(vars(country_code), ncol = 1) +
+#   theme_minimal()
 
 # Stan Data ---------------------------------------------------------------
-
-# TESTING TESTING
-# use_subnat_data %<>% sample_n(10)
 
 stan_data <- lst(
   # Configuration
@@ -186,8 +208,8 @@ stan_data <- lst(
 
   # Data
 
-  N_national = n_distinct(use_subnat_data$countrycode),
-  N_subnational = use_subnat_data %>% count(countrycode) %>% pull(n) %>% as.array(),
+  N_national = n_distinct(use_subnat_data$country_code),
+  N_subnational = use_subnat_data %>% count(country_code) %>% pull(n) %>% as.array(),
 
   start_epidemic_offset,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
@@ -197,7 +219,7 @@ stan_data <- lst(
 
   time_to_death = time_to_death[1:total_days],
 
-  population = use_subnat_data$pop_ana %>%
+  population = use_subnat_data$population %>%
     as.array(),
   mean_ifr = use_subnat_data$ifr %>%
     as.array(),
@@ -263,15 +285,15 @@ make_initializer <- function(stan_data) {
 
 cat(str_glue("Running model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
-  count(countryname) %$% {
-    cat(str_glue("\n\t{countryname}: {n} sub regions.\n\n"))
+  count(country_name) %$% {
+    cat(str_glue("\n\t{country_name}: {n} sub regions.\n\n"))
   }
 cat("\n")
 
 # Sampling ----------------------------------------------------------------
 
 if (script_options$cmdstan) {
-  mob_model <- cmdstan_model(file.path("mobility-model", "mobility.stan"), cpp_options = list(stan_threads = TRUE))
+  mob_model <- cmdstan_model(file.path(root_path, "mobility-model", "mobility.stan"), cpp_options = list(stan_threads = TRUE))
   set_num_threads(3)
 
   mob_fit <- mob_model$sample(
@@ -284,7 +306,9 @@ if (script_options$cmdstan) {
     iter_warmup = script_options$iter %/% 2
   )
 } else {
-  mob_model <- stan_model(file.path("mobility-model", "mobility.stan"))
+  mob_model <- stan_model(file.path(root_path, "mobility-model", "mobility.stan"))
+
+  tictoc::tic("Sampling")
 
   mob_fit <- mob_model %>%
     sampling(
@@ -297,21 +321,48 @@ if (script_options$cmdstan) {
       ),
       # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
       init = make_initializer(stan_data),
+      save_warmup = FALSE,
       # par = "mean_deaths",
       # include = FALSE
     )
+
+  tictoc::toc()
 }
 
 # Extract Results ----------------------------------------------------------
 
-cat("Extracting results...")
+cat("\nExtracting results...\n\n")
+
+all_parameters <- as.array(mob_fit) %>%
+  plyr::adply(3, diagnose)
+
+cat("Maximum Rhat = ")
+all_parameters %>%
+  select(rhat) %>%
+  summarize_all(max, na.rm = TRUE) %>%
+  first() %>%
+  cat()
+cat("\nMinimum ESS Bulk = ")
+all_parameters %>%
+  select(ess_bulk) %>%
+  summarize_all(min, na.rm = TRUE) %>%
+  first() %>%
+  cat()
+cat("\nMinimum ESS Tail = ")
+all_parameters %>%
+  select(ess_tail) %>%
+  summarize_all(min, na.rm = TRUE) %>%
+  first() %>%
+  cat()
+
+cat("\n\n")
 
 subnat_results <- mob_fit %>%
   extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases"))
 
 day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
 
-if (!script_options$`no-post-predict`) {
+if (!script_options$`no-post-predict` && !script_options$prior) {
   day_param %<>% c("deaths_rep")
 }
 
@@ -327,7 +378,7 @@ use_subnat_data %<>%
     daily_data = map(daily_data, mutate, day_index = seq(n()))
   ) %>%
   left_join(subnat_results, by = "subnat_index") %>%
-  left_join(day_results, by = c("countrycode_string", "sub_region")) %>%
+  left_join(day_results, by = c("country_code", "sub_region")) %>%
   mutate(
     daily_data = map2(daily_data, day_data, left_join, by = "day_index")
   ) %>%
@@ -337,8 +388,8 @@ cat("done.\n")
 
 # Save --------------------------------------------------------------------
 
-save_file <- file.path("data", "mobility", "results", str_c(script_options$output , ".RData"))
-save_results_file <- file.path("data", "mobility", "results", str_c(script_options$output , "_results.rds"))
+save_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , ".RData"))
+save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , "_results.rds"))
 
 cat(str_glue("Saving results to {save_file} and {save_results_file} ..."))
 save(mob_fit, stan_data, file = save_file)
