@@ -147,7 +147,8 @@ transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
   vector[use_log_R0 ? N : 0] subnational_effect_log_R0;
 
-  vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  // vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
+  vector<lower = 0>[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt = rep_vector(0, D_total);
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
   row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
