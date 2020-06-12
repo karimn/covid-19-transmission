@@ -4,16 +4,23 @@
   prepare_subnat_data <raw-data-file> <output-data-file>
 " -> opt_desc
 
+
 script_options <- if (interactive()) {
+  root_path <- "."
+
   docopt::docopt(opt_desc, "data/cleaned.csv data/mobility/cleaned_subnat_data.csv") # Add the files here if running interactively
 } else {
+  root_path <- ".."
+
+  setwd(root_path)
+  source(file.path("renv", "activate.R"))
+  setwd("mobility-model")
+
   docopt::docopt(opt_desc)
 }
 
 library(magrittr)
 library(tidyverse)
-
-root_path <- if (interactive()) "." else ".."
 
 source(file.path(root_path, "mobility-model", "constants.R"))
 
