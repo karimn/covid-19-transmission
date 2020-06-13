@@ -5,10 +5,12 @@
 
 Options:
   -c <chains>, --chains=<chains>  Number of chains to use [default: 4]
-  -i <iterations>, --iter=<iterations>  Number of iterations [default: 2000]
+  -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
+  -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
   --no-partial-pooling  Do not use a hierarchical model
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
+  --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {cmdstanr} instead of {rstan}
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
@@ -19,7 +21,8 @@ Options:
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "fit us -i 1000 --rand-sample-subnat=10")
+  # docopt::docopt(opt_desc, "fit it -i 1000")
+  docopt::docopt(opt_desc, "fit it -i 1000 --merge-days=2")
 } else {
   root_path <- ".."
 
@@ -35,7 +38,7 @@ library(tidyverse)
 library(wpp2019)
 
 script_options %<>%
-  modify_at(c("chains", "iter", "rand-sample-subnat"), as.integer) %>%
+  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days"), as.integer) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
   # modify_at(c(), as.numeric)
@@ -48,6 +51,7 @@ if (script_options$cmdstan) {
   rstan_options(auto_write = TRUE)
 }
 
+time_resolution <- if (is_empty(script_options$`merge-days`)) 1 else script_options$`merge-days`
 
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "constants.R"))
@@ -147,6 +151,34 @@ if (!is_empty(script_options$`rand-sample-subnat`)) {
     sample_n(script_options$`rand-sample-subnat`)
 }
 
+if (!is_empty(script_options$`merge-days`)) {
+  cat(str_glue("Merging days (resolution = {time_resolution})..."))
+
+  use_subnat_data %<>%
+    mutate(
+      daily_data = map(
+        daily_data,
+        ~ mutate(.x, day_group_index = ((day_index - 1) %/% time_resolution) + 1) %>%
+          group_by(day_group_index) %>% # Using mutate instead of summarize because I need to combine mutate with mutate_at.
+          mutate(
+            date = first(date),
+            new_deaths = sum(new_deaths),
+            cum_deaths = last(cum_deaths),
+            all_mob_observed = sum(all_mob_observed) == n(),
+            group_size = n()
+          ) %>%
+          mutate_at(vars(starts_with("g_"), average_mob), mean) %>%
+          slice(1) %>%
+          select(day_group_index, group_size, date, new_deaths, cum_deaths, all_mob_observed, starts_with("g_"), average_mob) %>%
+          ungroup() %>%
+          filter(group_size == time_resolution)),
+
+      num_days_observed = map_int(daily_data, nrow)
+    )
+
+  cat("done.\n")
+}
+
 # Time to Death -----------------------------------------------------------
 
 # time_to_death_draws <- EnvStats::rgammaAlt(1e8, 5.1, 0.86) + # infection-to-onset distribution
@@ -154,14 +186,17 @@ if (!is_empty(script_options$`rand-sample-subnat`)) {
 #
 # quant_time_to_death <- ecdf(time_to_death_draws)
 #
-# # time_to_death <- c(0, seq(1.5, by = 1, length.out = max(use_subnat_data$num_days_observed) + days_to_forecast)) %>%
-# time_to_death <- c(0, seq(1.5, by = 1, length.out = 365)) %>%
-#   map_dbl(quant_time_to_death) %>%
-#   subtract(lag(.)) %>%
-#   discard(is.na)
+# time_to_death_ecdf <- c(0, seq(1.5, by = 1, length.out = 365)) %>%
+#   map_dbl(quant_time_to_death)
 #
-# write_rds(time_to_death, path = file.path(root_path, "data", "mobility", "time_to_death.rds"))
-time_to_death <- read_rds(file.path(root_path, "data", "mobility", "time_to_death.rds"))
+# write_rds(time_to_death_ecdf, path = file.path(root_path, "data", "mobility", "time_to_death.rds"))
+
+time_to_death_ecdf <- read_rds(file.path(root_path, "data", "mobility", "time_to_death.rds"))
+
+time_to_death <- time_to_death_ecdf %>%
+  magrittr::extract(((seq_along(.) - 1) %% time_resolution) == 0) %>%
+  subtract(lag(.)) %>%
+  discard(is.na)
 
 # Plot timelines ----------------------------------------------------------
 
@@ -211,10 +246,10 @@ stan_data <- lst(
   N_national = n_distinct(use_subnat_data$country_code),
   N_subnational = use_subnat_data %>% count(country_code) %>% pull(n) %>% as.array(),
 
-  start_epidemic_offset,
+  start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
-  days_to_impute_cases = days_seeding,
-  days_to_forecast,
+  days_to_impute_cases = days_seeding %/% time_resolution,
+  days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
 
   time_to_death = time_to_death[1:total_days],
@@ -240,6 +275,8 @@ stan_data <- lst(
   } else {
     array(dim = 0)
   },
+
+  time_resolution,
 )
 
 make_initializer <- function(stan_data) {
@@ -311,25 +348,34 @@ if (script_options$cmdstan) {
 } else {
   mob_model <- stan_model(file.path(root_path, "mobility-model", "mobility.stan"))
 
+  sampling_args <- rlang::list2(
+    mob_model,
+    data = stan_data,
+    iter = script_options$iter,
+    chains = script_options$chains,
+    control = lst(
+      adapt_delta = 0.95,
+      max_treedepth = 12
+    ),
+    # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
+    init = make_initializer(stan_data),
+    save_warmup = FALSE,
+    # par = "mean_deaths",
+    # include = FALSE
+  )
+
+  if (!is_empty(script_options$warmup)) {
+    sampling_args %<>%
+      update_list(
+        warmup = script_options$warmup
+      )
+  }
+
   tictoc::tic("Sampling")
 
-  mob_fit <- mob_model %>%
-    sampling(
-      data = stan_data,
-      iter = script_options$iter,
-      chains = script_options$chains,
-      control = lst(
-        adapt_delta = 0.95,
-        max_treedepth = 12
-      ),
-      # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
-      init = make_initializer(stan_data),
-      save_warmup = FALSE,
-      # par = "mean_deaths",
-      # include = FALSE
-    )
+  mob_fit <- exec(sampling, !!!sampling_args)
 
-  tictoc::toc()
+  # tictoc::toc()
 }
 
 # Extract Results ----------------------------------------------------------
