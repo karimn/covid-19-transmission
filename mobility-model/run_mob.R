@@ -246,6 +246,7 @@ make_initializer <- function(stan_data) {
   N <- sum(stan_data$N_subnational)
   D_total <- sum(stan_data$days_observed) + stan_data$N_subnational * stan_data$days_to_forecast
   is_multinational <- stan_data$N_national > 1
+  num_singleton_countries <- sum(stan_data$N_subnational == 1)
 
   function(chain_id) {
     lst(
@@ -257,12 +258,14 @@ make_initializer <- function(stan_data) {
       else array(dim = c(stan_data$num_coef, 0)),
 
       beta_subnational_sd = if (stan_data$hierarchical_mobility_model)
-        matrix(abs(rnorm(stan_data$num_coef * stan_data$N_national, 0, 0.1)), nrow = stan_data$num_coef, ncol = stan_data$N_national)
-      else array(dim = c(0, stan_data$N_national)),
+        matrix(abs(rnorm(stan_data$num_coef * (stan_data$N_national - num_singleton_countries), 0, 0.1)),
+               nrow = stan_data$num_coef,
+               ncol = stan_data$N_national - num_singleton_countries)
+      else array(dim = c(0, stan_data$N_national - num_singleton_countries)),
 
       beta_subnational_raw = if (stan_data$hierarchical_mobility_model)
-        matrix(rnorm(stan_data$num_coef * N, 0, 1), nrow = stan_data$num_coef, ncol = N)
-      else array(dim = c(0, N)),
+        matrix(rnorm(stan_data$num_coef * (N - num_singleton_countries), 0, 1), nrow = stan_data$num_coef, ncol = N - num_singleton_countries)
+      else array(dim = c(0, N - num_singleton_countries)),
 
       beta = matrix(rnorm(stan_data$num_coef * N, 0, 0.1), ncol = stan_data$num_coef, nrow = N),
 
@@ -275,10 +278,10 @@ make_initializer <- function(stan_data) {
       toplevel_log_R0 = rnorm(1, 0, 0.1),
       national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
       national_effect_log_R0_sd = abs(rnorm(1, 0, 0.1)),
-      subnational_effect_log_R0_raw = if (stan_data$use_log_R0) rnorm(N, 0, 0.1) else array(dim = 0),
-      subnational_effect_log_R0_sd = if (stan_data$use_log_R0) as.array(abs(rnorm(stan_data$N_national, 0, 0.075))) else array(dim = 0),
+      subnational_effect_log_R0_raw = if (stan_data$use_log_R0) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
+      subnational_effect_log_R0_sd = if (stan_data$use_log_R0) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
-      ifr_noise = abs(rnorm(N, 0, 0.1)),
+      ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
     )
   }
 }

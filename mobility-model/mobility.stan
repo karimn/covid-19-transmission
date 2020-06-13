@@ -66,6 +66,8 @@ transformed data {
   int max_days_observed = max(days_observed) + days_to_forecast;
   int is_multinational = N_national > 1;
 
+  int num_singleton_countries = 0; // Number of countries with only one subnational entity
+
   real toplevel_R0_mean = 3.28;
 
   real toplevel_log_R0_sd = sqrt(log((hyperparam_toplevel_R0_sd^2 / toplevel_R0_mean^2) + 1));
@@ -113,6 +115,12 @@ transformed data {
       }
     }
   }
+
+  for (country_index in 1:N_national) {
+    if (N_subnational[country_index] == 1) {
+      num_singleton_countries += 1;
+    }
+  }
 }
 
 parameters {
@@ -128,8 +136,8 @@ parameters {
   vector<lower = 0>[is_multinational && hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
   matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw; // Uncentered for now to avoid divergence
 
-  matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national] beta_subnational_sd;
-  matrix[hierarchical_mobility_model ? num_coef : 0, N] beta_subnational_raw;
+  matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national - num_singleton_countries] beta_subnational_sd;
+  matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
 
   vector<lower = 0>[N] ifr_noise;
 
@@ -139,13 +147,13 @@ parameters {
   real toplevel_log_R0;
   vector[is_multinational && use_log_R0 ? N_national : 0] national_effect_log_R0_raw;
   real<lower = 0> national_effect_log_R0_sd;
-  vector[use_log_R0 ? N : 0] subnational_effect_log_R0_raw;
-  vector<lower = 0>[use_log_R0 ? N_national : 0] subnational_effect_log_R0_sd;
+  vector[use_log_R0 ? N - num_singleton_countries : 0] subnational_effect_log_R0_raw;
+  vector<lower = 0>[use_log_R0 ? N_national - num_singleton_countries : 0] subnational_effect_log_R0_sd;
 }
 
 transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
-  vector[use_log_R0 ? N : 0] subnational_effect_log_R0;
+  vector[use_log_R0 ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
   // vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
   vector<lower = 0>[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
@@ -158,10 +166,11 @@ transformed parameters {
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
   if (use_log_R0) {
-    subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N);
+    subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N - num_singleton_countries);
   }
 
   {
+    int full_subnat_pos = 1; // The "full" pointers do not exclude subnational entities in singleton countries (have only one subnational entity)
     int subnat_pos = 1;
     int days_pos = 1;
 
@@ -169,58 +178,60 @@ transformed parameters {
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
-      int subnat_end = subnat_pos + num_subnat - 1;
+      int full_subnat_end = subnat_pos + num_subnat - 1;
+      int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
 
       if (is_multinational) {
         if (hierarchical_mobility_model) {
           if (use_fixed_tau_beta) {
-            beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] * beta_national_sd[1], num_subnat);
+            beta[, full_subnat_pos:full_subnat_end] += rep_matrix(beta_national_raw[, country_index] * beta_national_sd[1], num_subnat);
           } else {
-            beta[, subnat_pos:subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
+            beta[, full_subnat_pos:full_subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
           }
         }
 
         if (use_log_R0) {
-          log_R0[subnat_pos:subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
         }
       }
 
-      if (use_log_R0) {
+      if (use_log_R0 && num_subnat > 1) {
         subnational_effect_log_R0[subnat_pos:subnat_end] = subnational_effect_log_R0_raw[subnat_pos:subnat_end] * subnational_effect_log_R0_sd[country_index];
-        log_R0[subnat_pos:subnat_end] += subnational_effect_log_R0[subnat_pos:subnat_end];
+        log_R0[full_subnat_pos:full_subnat_end] += subnational_effect_log_R0[subnat_pos:subnat_end];
       }
 
       for (subnat_index in 1:N_subnational[country_index]) {
+        int curr_full_subnat_pos = full_subnat_pos + subnat_index - 1;
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_subnat_pos] + days_to_forecast - 1;
 
-        vector[total_days[curr_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_subnat_pos]);
+        vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
-        if (hierarchical_mobility_model) {
+        if (hierarchical_mobility_model && num_subnat > 1) {
           if (use_fixed_tau_beta) {
-            beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] * beta_subnational_sd[1, country_index];
+            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] * beta_subnational_sd[1, country_index];
           } else {
-            beta[, curr_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
+            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
           }
         }
 
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[subnat_index], days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
-          mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+          mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
 
-          Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos]) * mobility_effect[days_pos:days_end];
+          Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos]) * mobility_effect[days_pos:days_end];
         } else {
-          mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+          mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
 
-          Rt[days_pos:days_end] = exp(log_R0[curr_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_subnat_pos]);
+          Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
         }
 
         for (day_index in 1:total_days[curr_subnat_pos]) {
           int curr_day_pos = days_pos + day_index - 1;
 
           if (day_index > days_to_impute_cases) {
-            real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_subnat_pos]);
+            real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
 
             Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
 
@@ -232,7 +243,7 @@ transformed parameters {
           cumulative_cases[day_index] = new_cases[curr_day_pos] + (day_index > 1 ? cumulative_cases[day_index - 1] : 0);
 
           if (day_index > 1) {
-            mean_deaths[curr_day_pos] = ifr[curr_subnat_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_time_to_death, day_index - 1);
+            mean_deaths[curr_day_pos] = ifr[curr_full_subnat_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_time_to_death, day_index - 1);
           } else {
             mean_deaths[curr_day_pos] = 1e-15 * new_cases[curr_day_pos];
           }
@@ -241,6 +252,7 @@ transformed parameters {
         days_pos = days_end + 1;
       }
 
+      full_subnat_pos = full_subnat_end + 1;
       subnat_pos = subnat_end + 1;
     }
   }
