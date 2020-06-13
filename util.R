@@ -85,14 +85,14 @@ plot_subnat_ci <- function(results) {
     geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9), fatten = 1.5) +
     geom_point(aes(x = mean), size = 1.5, shape = 5) +
     labs(x = "", y = "") +
-    facet_wrap(vars(countrycode_string), ncol = 1, scales = "free_y")
+    facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
 }
 
 plot_day_ci <- function(results) {
   results %>%
-    select(countrycode_string, sub_region, daily_data) %>%
+    select(country_code, sub_region, daily_data) %>%
     unnest(daily_data) %>%
-    select(countrycode_string, sub_region, day_index, param_results) %>%
+    select(country_code, sub_region, day_index, param_results) %>%
     unnest(param_results) %>%
     filter(fct_match(parameter, "Rt_adj")) %>%
     ggplot(aes(x = day_index)) +
