@@ -43,6 +43,8 @@ data {
   vector<lower = 0>[sum(N_subnational)] mean_ifr; // Not sure we'd have this at the subnational level. If we don't we change this to the national level.
   int<lower = 0> deaths[fit_model ? sum(days_observed) : 0];
 
+  int<lower = 1> time_resolution;
+
   // Hyperparameters
 
   real<lower = 0> hyperparam_tau_beta_toplevel;
@@ -89,12 +91,12 @@ transformed data {
     vector[max_days_observed] gen_factor;
     vector[max_days_observed] gamma_cdfs;
 
-    gamma_cdfs[1] = gamma_cdf(1.5, gen_factor_alpha, gen_factor_beta);
+    gamma_cdfs[1] = gamma_cdf(1.5 * time_resolution, gen_factor_alpha, gen_factor_beta);
     gen_factor[1] = gamma_cdfs[1];
 
     // Discretization
     for (day_index in 2:max_days_observed) {
-      gamma_cdfs[day_index] = gamma_cdf(day_index + 0.5, gen_factor_alpha, gen_factor_beta);
+      gamma_cdfs[day_index] = gamma_cdf(time_resolution * day_index + 0.5, gen_factor_alpha, gen_factor_beta);
       gen_factor[day_index] = gamma_cdfs[day_index] - gamma_cdfs[day_index - 1];
     }
 
