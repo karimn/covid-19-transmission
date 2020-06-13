@@ -99,7 +99,7 @@ prior_results %>%
 ## Italy
 
 ```{r}
-ita_results <- read_rds(file.path("data", "mobility", "results", "ita_mob_results.rds"))
+ita_results <- read_rds(file.path("data", "mobility", "results", "it_mob_results.rds"))
 ```
 
 ```{r it-R0-plot, fig.width=10}
@@ -109,9 +109,9 @@ ita_results %>%
   labs(title = TeX("R_{0,m}"))
 ```
 
-```{r it-Rt-plot, fig.height=6, fig.width=10}
+```{r it-Rt-plot, fig.height=6, fig.width=12}
 ita_results %>% 
-  plot_day_ci() +
+  plot_day_ci(use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
