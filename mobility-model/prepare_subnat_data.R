@@ -121,7 +121,9 @@ subnat_data %<>%
       map2(first_observed_death, clean_missing_spread) %>%
       map(mutate_at, vars(starts_with("g_")), zoo::na.locf, na.rm = FALSE) %>% # Any non-leading NAs are replaced with last prior non-NA
       map(mutate_at, vars(starts_with("g_")), coalesce, 0) %>%  # Any leading NAs are replaced with zeroes (as in Vollmer et al.)
-      map(mutate, average_mob = (g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 4),
+      map(mutate, average_mob = (g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 4) %>%
+      map(arrange, date) %>%
+      map(mutate, day_index = seq(n()))
   )
 
 write_rds(subnat_data, path = script_options$`output-data-file`)
