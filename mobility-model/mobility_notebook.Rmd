@@ -317,3 +317,32 @@ ita_usa_results %>%
   geom_vline(xintercept = 3.28, linetype = "dotted") +
   labs(title = TeX("R_{0,m}"))
 ```
+
+## Argentina, Australia, Canada, Portugal 
+
+```{r}
+incr_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_results.rds"))
+```
+
+```{r incr-R0-plot, fig.width=10}
+incr_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+
+```{r it-Rt-plot, fig.height=6, fig.width=10}
+incr_results %>% 
+  group_by(country_code, country_name) %>% 
+  do(plot_obj = plot_day_ci(.)) %>% 
+  ungroup() %>% 
+  mutate(plot_obj = map2(plot_obj, country_name, 
+                         ~ .x + 
+                           geom_hline(yintercept = 1, linetype = "dotted") +
+                           labs(subtitle = .y))) %>% 
+  pull(plot_obj) %>%
+  # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
+  plot_grid(plotlist = ., ncol = 1)
+```
+
