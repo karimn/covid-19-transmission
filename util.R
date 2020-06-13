@@ -88,14 +88,24 @@ plot_subnat_ci <- function(results) {
     facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
 }
 
-plot_day_ci <- function(results) {
+plot_day_ci <- function(results, use_date = FALSE) {
+  time_aes <- if (use_date) aes(x = date) else aes(x = day_index)
+
+  # opt_theme <- if (use_date) {
+  #   list()
+  # } else {
+  #   list(
+  #     axis.text.x = element_blank()
+  #   )
+  # }
+
   results %>%
     select(country_code, sub_region, daily_data) %>%
     unnest(daily_data) %>%
-    select(country_code, sub_region, day_index, param_results) %>%
+    select(country_code, sub_region, day_index, date, param_results) %>%
     unnest(param_results) %>%
     filter(fct_match(parameter, "Rt_adj")) %>%
-    ggplot(aes(x = day_index)) +
+    ggplot(time_aes) +
     geom_line(aes(y = per_0.5)) +
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.25) +
     labs(x = "", y = "") +
@@ -103,16 +113,16 @@ plot_day_ci <- function(results) {
     theme(
       strip.placement = "outside",
       strip.text = element_text(angle = 0),
-      axis.text.x = element_blank()
+      axis.text.x = if (!use_date) element_blank()
     )
 }
 
 plot_last_day_ci <- function(results) {
   results %>%
-    select(countrycode_string, sub_region, daily_data) %>%
+    select(country_code, sub_region, daily_data) %>%
     mutate(daily_data = map(daily_data, filter, min_rank(date) == n())) %>%
     unnest(daily_data) %>%
-    select(countrycode_string, sub_region, day_index, param_results) %>%
+    select(country_code, sub_region, day_index, param_results) %>%
     unnest(param_results) %>%
     filter(fct_match(parameter, "Rt_adj")) %>%
     mutate(sub_region = fct_reorder(sub_region, per_0.5)) %>%
@@ -120,5 +130,5 @@ plot_last_day_ci <- function(results) {
     geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9), fatten = 1.5) +
     geom_point(aes(x = mean), size = 1.5, shape = 5) +
     labs(x = "", y = "") +
-    facet_wrap(vars(countrycode_string), ncol = 1)
+    facet_wrap(vars(country_code), ncol = 1)
 }
