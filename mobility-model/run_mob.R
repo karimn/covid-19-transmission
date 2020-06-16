@@ -8,8 +8,9 @@ Options:
   -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
-  --no-partial-pooling  Do not use a hierarchical model
+  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
+  --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {cmdstanr} instead of {rstan}
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
@@ -21,8 +22,8 @@ Options:
 script_options <- if (interactive()) {
   root_path <- "."
 
-  # docopt::docopt(opt_desc, "fit it -i 1000")
-  docopt::docopt(opt_desc, "fit it -i 1000 --merge-days=2")
+  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model='~ 0 + average_all_mob'")
+  docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
 } else {
   root_path <- ".."
 
@@ -52,6 +53,16 @@ if (script_options$cmdstan) {
 }
 
 time_resolution <- if (is_empty(script_options$`merge-days`)) 1 else script_options$`merge-days`
+
+if (!is_null(script_options$`no-partial-pooling`)) {
+  tryCatch(
+    script_options$`no-partial-pooling` %<>%
+      rlang::arg_match(values = c("all", "mob", "r0")) %>%
+      factor(levels = c("all", "mob", "r0")),
+
+    error = function(err) stop("Unexpected value for --no-partial-pooling")
+  )
+}
 
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "constants.R"))
@@ -224,7 +235,8 @@ stan_data <- lst(
   # Configuration
 
   fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
-  hierarchical_mobility_model = !script_options$`no-partial-pooling`,
+  hierarchical_R0_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "r0")),
+  hierarchical_mobility_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "mob")),
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
@@ -261,7 +273,7 @@ stan_data <- lst(
 
   design_matrix = use_subnat_data %>%
     unnest(daily_data) %>%
-    modelr::model_matrix(mob_formula),
+    modelr::model_matrix(if (is_null(script_options$`mobility-model`)) mob_formula else as.formula(script_options$`mobility-model`)),
     # mutate_all(~ (.x - mean(.x)) / sd(.x)), # Standardization
     # select(1) %>% # Testing speed when all feature are (artificially) uncorrelated
     # mutate(x2 = rnorm(n()), x3 = rnorm(n())),
@@ -289,8 +301,8 @@ make_initializer <- function(stan_data) {
 
   function(chain_id) {
     lst(
-      beta_toplevel = rnorm(stan_data$num_coef, 0, 0.1),
-      beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) abs(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = c(0)),
+      beta_toplevel = as.array(rnorm(stan_data$num_coef, 0, 0.1)),
+      beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) as.array(abs(rnorm(stan_data$num_coef, 0, 0.1))) else array(dim = c(0)),
 
       beta_national_raw = if (is_multinational && stan_data$hierarchical_mobility_model)
         matrix(rnorm(stan_data$num_coef * stan_data$N_national, 0, 1), nrow = stan_data$num_coef, ncol = stan_data$N_national)
@@ -315,10 +327,10 @@ make_initializer <- function(stan_data) {
       Rt_adj = runif(D_total, 0, 0.25),
 
       toplevel_log_R0 = rnorm(1, 0, 0.1),
-      national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
+      national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
       national_effect_log_R0_sd = abs(rnorm(1, 0, 0.1)),
-      subnational_effect_log_R0_raw = if (stan_data$use_log_R0) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
-      subnational_effect_log_R0_sd = if (stan_data$use_log_R0) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
+      subnational_effect_log_R0_raw = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
+      subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
       ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
     )
@@ -377,15 +389,14 @@ if (script_options$cmdstan) {
 
   mob_fit <- exec(sampling, !!!sampling_args)
 
-  # tictoc::toc()
+  tictoc::toc()
 }
 
 # Extract Results ----------------------------------------------------------
 
 cat("\nExtracting results...\n\n")
 
-all_parameters <- as.array(mob_fit) %>%
-  plyr::adply(3, diagnose)
+all_parameters <- extract_parameters(mob_fit)
 
 cat("Maximum Rhat = ")
 all_parameters %>%
