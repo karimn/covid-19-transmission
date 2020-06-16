@@ -18,10 +18,16 @@ diagnose <- function(cell, no_sim_diag = FALSE) {
   }
 }
 
+extract_parameters <- function(fit, ...) {
+  fit %>%
+    as.array(...) %>%
+    plyr::adply(3, diagnose) %>%
+    as_tibble()
+}
+
 extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
   fit %>%
-    as.array(par = par) %>%
-    plyr::adply(3, diagnose) %>%
+    extract_parameters(par = par) %>%
     tidyr::extract(parameters, c("parameter", "subnat_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     bind_rows(
       filter(., str_detect(parameter, "log")) %>%
@@ -39,8 +45,7 @@ extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
 
 extract_day_results <- function(fit, par) {
   fit %>%
-    as.array(par = par) %>%
-    plyr::adply(3, diagnose) %>%
+    extract_parameters(par = par) %>%
     tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
@@ -63,8 +68,7 @@ extract_day_results <- function(fit, par) {
 
 extract_beta <- function(fit) {
   fit %>%
-    as.array(par = "beta") %>%
-    plyr::adply(3, diagnose) %>%
+    extract_parameters(par = par) %>%
     tidyr::extract(parameters, c("coef_index", "subnat_index"), ("\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
@@ -91,14 +95,6 @@ plot_subnat_ci <- function(results) {
 plot_day_ci <- function(results, use_date = FALSE) {
   time_aes <- if (use_date) aes(x = date) else aes(x = day_index)
 
-  # opt_theme <- if (use_date) {
-  #   list()
-  # } else {
-  #   list(
-  #     axis.text.x = element_blank()
-  #   )
-  # }
-
   results %>%
     select(country_code, sub_region, daily_data) %>%
     unnest(daily_data) %>%
@@ -108,6 +104,7 @@ plot_day_ci <- function(results, use_date = FALSE) {
     ggplot(time_aes) +
     geom_line(aes(y = per_0.5)) +
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.25) +
+    geom_hline(yintercept = 1, linetype = "dotted") +
     labs(x = "", y = "") +
     facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
     theme(
