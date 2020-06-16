@@ -18,6 +18,7 @@ functions {
 
 data {
   int<lower = 0, upper = 1> fit_model; // Fit vs prior-predict
+  int<lower = 0, upper = 1> hierarchical_R0_model;
   int<lower = 0, upper = 1> hierarchical_mobility_model;
   int<lower = 1, upper = 2> mobility_model_type;
   int<lower = 0, upper = 1> use_log_R0;
@@ -147,15 +148,15 @@ parameters {
   real<lower = 0> original_R0_sd;
 
   real toplevel_log_R0;
-  vector[is_multinational && use_log_R0 ? N_national : 0] national_effect_log_R0_raw;
+  vector[is_multinational && use_log_R0 && hierarchical_R0_model ? N_national : 0] national_effect_log_R0_raw;
   real<lower = 0> national_effect_log_R0_sd;
-  vector[use_log_R0 ? N - num_singleton_countries : 0] subnational_effect_log_R0_raw;
-  vector<lower = 0>[use_log_R0 ? N_national - num_singleton_countries : 0] subnational_effect_log_R0_sd;
+  vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0_raw;
+  vector<lower = 0>[use_log_R0 && hierarchical_R0_model ? N_national - num_singleton_countries : 0] subnational_effect_log_R0_sd;
 }
 
 transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
-  vector[use_log_R0 ? N - num_singleton_countries : 0] subnational_effect_log_R0;
+  vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
   // vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
   vector<lower = 0>[D_total] mean_deaths = rep_vector(0, D_total); // Not a matrix; this could be a ragged data structure
@@ -167,7 +168,7 @@ transformed parameters {
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
-  if (use_log_R0) {
+  if (use_log_R0 && hierarchical_R0_model) {
     subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N - num_singleton_countries);
   }
 
@@ -192,12 +193,12 @@ transformed parameters {
           }
         }
 
-        if (use_log_R0) {
+        if (use_log_R0 && hierarchical_R0_model) {
           log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
         }
       }
 
-      if (use_log_R0 && num_subnat > 1) {
+      if (use_log_R0 && hierarchical_R0_model && num_subnat > 1) {
         subnational_effect_log_R0[subnat_pos:subnat_end] = subnational_effect_log_R0_raw[subnat_pos:subnat_end] * subnational_effect_log_R0_sd[country_index];
         log_R0[full_subnat_pos:full_subnat_end] += subnational_effect_log_R0[subnat_pos:subnat_end];
       }
@@ -285,7 +286,7 @@ model {
 
   original_R0_sd ~ normal(0, 0.5);
 
-  if (use_log_R0) {
+  if (use_log_R0 && hierarchical_R0_model) {
     if (is_multinational) {
       national_effect_log_R0_raw ~ std_normal();
     }
