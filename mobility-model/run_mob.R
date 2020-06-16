@@ -279,6 +279,8 @@ stan_data <- lst(
   time_resolution,
 )
 
+# Initializer -------------------------------------------------------------
+
 make_initializer <- function(stan_data) {
   N <- sum(stan_data$N_subnational)
   D_total <- sum(stan_data$days_observed) + stan_data$N_subnational * stan_data$days_to_forecast
@@ -288,9 +290,9 @@ make_initializer <- function(stan_data) {
   function(chain_id) {
     lst(
       beta_toplevel = rnorm(stan_data$num_coef, 0, 0.1),
-      beta_national_sd = if (is_multinational) abs(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = c(0)),
+      beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) abs(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = c(0)),
 
-      beta_national_raw = if (is_multinational)
+      beta_national_raw = if (is_multinational && stan_data$hierarchical_mobility_model)
         matrix(rnorm(stan_data$num_coef * stan_data$N_national, 0, 1), nrow = stan_data$num_coef, ncol = stan_data$N_national)
       else array(dim = c(stan_data$num_coef, 0)),
 
