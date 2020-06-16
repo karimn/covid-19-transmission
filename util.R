@@ -68,7 +68,7 @@ extract_day_results <- function(fit, par) {
 
 extract_beta <- function(fit) {
   fit %>%
-    extract_parameters(par = par) %>%
+    extract_parameters(par = "beta") %>%
     tidyr::extract(parameters, c("coef_index", "subnat_index"), ("\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
