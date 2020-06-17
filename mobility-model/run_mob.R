@@ -22,8 +22,9 @@ Options:
 script_options <- if (interactive()) {
   root_path <- "."
 
-  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model='~ 0 + average_all_mob'")
-  docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
+  # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
+  # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
+  docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
 } else {
   root_path <- ".."
 
@@ -63,6 +64,9 @@ if (!is_null(script_options$`no-partial-pooling`)) {
     error = function(err) stop("Unexpected value for --no-partial-pooling")
   )
 }
+
+save_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , ".RData"))
+save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , "_results.rds"))
 
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "constants.R"))
@@ -394,66 +398,72 @@ if (script_options$cmdstan) {
 
 # Extract Results ----------------------------------------------------------
 
-cat("\nExtracting results...\n\n")
+tryCatch({
+  cat("\nExtracting results...\n\n")
 
-all_parameters <- extract_parameters(mob_fit)
+  all_parameters <- extract_parameters(mob_fit)
 
-cat("Maximum Rhat = ")
-all_parameters %>%
-  select(rhat) %>%
-  summarize_all(max, na.rm = TRUE) %>%
-  first() %>%
-  cat()
-cat("\nMinimum ESS Bulk = ")
-all_parameters %>%
-  select(ess_bulk) %>%
-  summarize_all(min, na.rm = TRUE) %>%
-  first() %>%
-  cat()
-cat("\nMinimum ESS Tail = ")
-all_parameters %>%
-  select(ess_tail) %>%
-  summarize_all(min, na.rm = TRUE) %>%
-  first() %>%
-  cat()
+  cat("Maximum Rhat = ")
+  all_parameters %>%
+    select(rhat) %>%
+    summarize_all(max, na.rm = TRUE) %>%
+    first() %>%
+    cat()
+  cat("\nMinimum ESS Bulk = ")
+  all_parameters %>%
+    select(ess_bulk) %>%
+    summarize_all(min, na.rm = TRUE) %>%
+    first() %>%
+    cat()
+  cat("\nMinimum ESS Tail = ")
+  all_parameters %>%
+    select(ess_tail) %>%
+    summarize_all(min, na.rm = TRUE) %>%
+    first() %>%
+    cat()
 
-cat("\n\n")
+  cat("\n\n")
 
-subnat_results <- mob_fit %>%
-  extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases"))
+  subnat_results <- mob_fit %>%
+    extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases"))
 
-day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
+  day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
 
-if (!script_options$`no-post-predict` && !script_options$prior) {
-  day_param %<>% c("deaths_rep")
-}
+  if (!script_options$`no-post-predict` && !script_options$prior) {
+    day_param %<>% c("deaths_rep")
+  }
 
-day_results <- mob_fit %>%
-  extract_day_results(day_param)
+  day_results <- mob_fit %>%
+    extract_day_results(day_param)
 
-beta_results <- mob_fit %>%
-  extract_beta()
+  beta_results <- mob_fit %>%
+    extract_beta()
 
-use_subnat_data %<>%
-  mutate(
-    subnat_index = seq(n()),
-    daily_data = map(daily_data, mutate, day_index = seq(n()))
-  ) %>%
-  left_join(subnat_results, by = "subnat_index") %>%
-  left_join(day_results, by = c("country_code", "sub_region")) %>%
-  mutate(
-    daily_data = map2(daily_data, day_data, left_join, by = "day_index")
-  ) %>%
-  select(-day_data)
+  use_subnat_data %<>%
+    mutate(
+      subnat_index = seq(n()),
+      daily_data = map(daily_data, mutate, day_index = seq(n()))
+    ) %>%
+    left_join(subnat_results, by = "subnat_index") %>%
+    left_join(day_results, by = c("country_code", "sub_region")) %>%
+    mutate(
+      daily_data = map2(daily_data, day_data, left_join, by = "day_index")
+    ) %>%
+    select(-day_data)
 
-cat("done.\n")
+  cat("done.\n")
+},
+error = function(err) {
+  cat("error encountered while extracting results.\n")
+},
+finally = function() {
+  cat(str_glue("Saving fit to {save_file} ..."))
+  save(mob_fit, stan_data, file = save_file)
+  cat("done.\n")
+})
 
 # Save --------------------------------------------------------------------
 
-save_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , ".RData"))
-save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , "_results.rds"))
-
-cat(str_glue("Saving results to {save_file} and {save_results_file} ..."))
-save(mob_fit, stan_data, file = save_file)
+cat(str_glue("Saving results to {save_results_file} ..."))
 write_rds(use_subnat_data, save_results_file)
 cat("done.\n")
