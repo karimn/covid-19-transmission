@@ -84,6 +84,11 @@ transformed data {
   vector<lower = 0>[max_days_observed] rev_time_to_death;
   vector<lower = 0>[max_days_observed] rev_gen_factor;
 
+  matrix[D, num_coef] centered_design_matrix; // E.g., mobility
+  matrix[D, num_coef] qr_Q_mat;
+  matrix[num_coef, num_coef] qr_R_mat;
+  matrix[num_coef, num_coef] qr_inv_R_mat;
+
   {
     real gen_factor_alpha = 1 / (0.62^2);              // alpha = 1 / tau^2;
     real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
@@ -124,6 +129,14 @@ transformed data {
       num_singleton_countries += 1;
     }
   }
+
+  for (coef_index in 1:num_coef) {
+    centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
+  }
+
+  qr_Q_mat = qr_Q(centered_design_matrix)[, 1:num_coef] * D;
+  qr_R_mat = qr_R(centered_design_matrix)[1:num_coef, ] / D;
+  qr_inv_R_mat = inverse(qr_R_mat);
 }
 
 parameters {
