@@ -325,7 +325,8 @@ model {
 }
 
 generated quantities {
-  int<lower = 0> deaths_rep[fit_model && generate_post_prediction ? D : 0];
+  vector<lower = 0>[fit_model && generate_post_prediction ? D : 0] deaths_rep;
+  vector<lower = 0>[fit_model && generate_post_prediction ? D : 0] cum_deaths_rep;
 
   if (fit_model && generate_post_prediction) {
     int subnat_pos = 1;
@@ -339,7 +340,8 @@ generated quantities {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
 
-        deaths_rep[days_pos:days_end] = neg_binomial_2_rng(mean_deaths[days_pos:days_end], overdisp_deaths);
+        deaths_rep[days_pos:days_end] = to_vector(neg_binomial_2_rng(mean_deaths[days_pos:days_end], overdisp_deaths));
+        cum_deaths_rep[days_pos:days_end] = cumulative_sum(deaths_rep[days_pos:days_end]);
 
         days_pos = days_end + days_to_forecast + 1;
       }
