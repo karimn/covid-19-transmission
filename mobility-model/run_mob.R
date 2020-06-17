@@ -300,7 +300,7 @@ stan_data <- lst(
 if (!is_null(script_options$hyperparam)) {
   hyperparam <- yaml::yaml.load_file(script_options$hyperparam)
 
-  cat("Using hyperparameters:\n")
+  cat("\nUsing hyperparameters:\n")
   iwalk(hyperparam, ~ cat(str_c("\t", .y, " = ", .x, "\n")))
   cat("\n")
 
