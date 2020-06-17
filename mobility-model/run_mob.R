@@ -11,6 +11,7 @@ Options:
   --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
+  --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {cmdstanr} instead of {rstan}
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
@@ -24,7 +25,8 @@ script_options <- if (interactive()) {
 
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
-  docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
+  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
+  docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
 } else {
   root_path <- ".."
 
@@ -295,6 +297,17 @@ stan_data <- lst(
   time_resolution,
 )
 
+if (!is_null(script_options$hyperparam)) {
+  hyperparam <- yaml::yaml.load_file(script_options$hyperparam)
+
+  cat("Using hyperparameters:\n")
+  iwalk(hyperparam, ~ cat(str_c("\t", .y, " = ", .x, "\n")))
+  cat("\n")
+
+  stan_data %<>%
+    list_modify(!!!hyperparam)
+}
+
 # Initializer -------------------------------------------------------------
 
 make_initializer <- function(stan_data) {
@@ -437,7 +450,8 @@ tryCatch({
     extract_day_results(day_param)
 
   beta_results <- mob_fit %>%
-    extract_beta()
+    extract_beta() %>%
+    rename(beta_results = param_results)
 
   use_subnat_data %<>%
     mutate(
@@ -445,6 +459,7 @@ tryCatch({
       daily_data = map(daily_data, mutate, day_index = seq(n()))
     ) %>%
     left_join(subnat_results, by = "subnat_index") %>%
+    left_join(beta_results, by = "subnat_index") %>%
     left_join(day_results, by = c("country_code", "sub_region")) %>%
     mutate(
       daily_data = map2(daily_data, day_data, left_join, by = "day_index")
@@ -452,11 +467,15 @@ tryCatch({
     select(-day_data)
 
   cat("done.\n")
+
+  cat(str_glue("Saving results to {save_results_file} ..."))
+  write_rds(use_subnat_data, save_results_file)
+  cat("done.\n")
 },
 error = function(err) {
   cat("error encountered while extracting results.\n")
 },
-finally = function() {
+finally = {
   cat(str_glue("Saving fit to {save_file} ..."))
   save(mob_fit, stan_data, file = save_file)
   cat("done.\n")
@@ -464,6 +483,3 @@ finally = function() {
 
 # Save --------------------------------------------------------------------
 
-cat(str_glue("Saving results to {save_results_file} ..."))
-write_rds(use_subnat_data, save_results_file)
-cat("done.\n")
