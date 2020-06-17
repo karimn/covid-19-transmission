@@ -344,7 +344,7 @@ incr_results %>%
 ```
 
 
-```{r it-Rt-plot, fig.height=6, fig.width=10}
+```{r incr-Rt-plot, fig.height=6, fig.width=10}
 incr_results %>% 
   group_by(country_code, country_name) %>% 
   do(plot_obj = plot_day_ci(.)) %>% 
@@ -357,13 +357,18 @@ incr_results %>%
   # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
   plot_grid(plotlist = ., ncol = 1)
 ```
+```{r, fig.width=14}
+incr_results %>% 
+  plot_post_deaths()
+```
+
 # Argentina, Australia, Canada, Portugal, Poland
 
 ```{r}
 incr_pl_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_pl_mob_avg_results.rds"))
 ```
 
-```{r pl-mob-plot, fig.height=6, fig.width=12}
+```{r incr2-mob-plot, fig.height=6, fig.width=12}
 incr_pl_results %>% 
   plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
   NULL
@@ -386,12 +391,17 @@ pl_results %>%
 # pl_results %>% 
 incr_pl_results %>% 
   filter(fct_match(country_code, "PL")) %>% 
-  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
   NULL
 ```
 
 ```{r pl-Rt-plot, fig.height=6, fig.width=10}
 pl_results %>% 
-  plot_day_ci(use_date = TRUE) +
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
+```
+```{r, fig.width=14}
+pl_results %>% 
+  plot_post_deaths()
 ```
