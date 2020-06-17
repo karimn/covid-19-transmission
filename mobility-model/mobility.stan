@@ -130,12 +130,15 @@ transformed data {
     }
   }
 
+  // TODO QR decomposition should be done at each subnational level
+  // https://discourse.mc-stan.org/t/qr-reparametrization-in-multilevel-models/6929
+
   for (coef_index in 1:num_coef) {
     centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
   }
 
-  qr_Q_mat = qr_Q(centered_design_matrix)[, 1:num_coef] * D;
-  qr_R_mat = qr_R(centered_design_matrix)[1:num_coef, ] / D;
+  qr_Q_mat = qr_thin_Q(centered_design_matrix) * sqrt(D - 1);
+  qr_R_mat = qr_thin_R(centered_design_matrix) / sqrt(D - 1);
   qr_inv_R_mat = inverse(qr_R_mat);
 }
 
@@ -146,14 +149,16 @@ parameters {
   real<lower = 0> tau_impute_cases;
   vector<lower = 0>[N] imputed_cases;
 
+  matrix[num_coef, hierarchical_mobility_model ? N : 1] beta_qr;
+
   // Linear model parameters
-  vector[num_coef] beta_toplevel;
+  // vector[num_coef] beta_toplevel;
 
   vector<lower = 0>[is_multinational && hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
-  matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw; // Uncentered for now to avoid divergence
-
+  // matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw; // Uncentered for now to avoid divergence
+  //
   matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national - num_singleton_countries] beta_subnational_sd;
-  matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
+  // matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
 
   vector<lower = 0>[N] ifr_noise;
 
@@ -168,6 +173,8 @@ parameters {
 }
 
 transformed parameters {
+
+
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
   vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
@@ -177,7 +184,7 @@ transformed parameters {
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
   row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
 
-  matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
+  // matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
