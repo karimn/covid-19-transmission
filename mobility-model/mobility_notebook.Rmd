@@ -109,9 +109,15 @@ ita_results %>%
   labs(title = TeX("R_{0,m}"))
 ```
 
+```{r it-mob-plot, fig.height=6, fig.width=12}
+ita_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
 ```{r it-Rt-plot, fig.height=6, fig.width=12}
 ita_results %>% 
-  plot_day_ci(use_date = TRUE) +
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
@@ -318,10 +324,16 @@ ita_usa_results %>%
   labs(title = TeX("R_{0,m}"))
 ```
 
-## Argentina, Australia, Canada, Portugal 
+# Argentina, Australia, Canada, Portugal 
 
 ```{r}
 incr_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_results.rds"))
+```
+
+```{r incr-mob-plot, fig.height=6, fig.width=12}
+incr_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
 ```
 
 ```{r incr-R0-plot, fig.width=10}
@@ -345,4 +357,41 @@ incr_results %>%
   # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
   plot_grid(plotlist = ., ncol = 1)
 ```
+# Argentina, Australia, Canada, Portugal, Poland
 
+```{r}
+incr_pl_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_pl_mob_avg_results.rds"))
+```
+
+```{r pl-mob-plot, fig.height=6, fig.width=12}
+incr_pl_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
+  NULL
+```
+
+# Poland
+
+```{r}
+pl_results <- read_rds(file.path("data", "mobility", "results", "pl_mob_results.rds"))
+```
+
+```{r pl-R0-plot, fig.width=10}
+pl_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r pl-mob-plot, fig.height=6, fig.width=12}
+# pl_results %>% 
+incr_pl_results %>% 
+  filter(fct_match(country_code, "PL")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r pl-Rt-plot, fig.height=6, fig.width=10}
+pl_results %>% 
+  plot_day_ci(use_date = TRUE) +
+  labs(title = TeX("R_{t,m}")) 
+```
