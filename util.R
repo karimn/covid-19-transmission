@@ -149,3 +149,18 @@ plot_last_day_ci <- function(results) {
     labs(x = "", y = "") +
     facet_wrap(vars(country_code), ncol = 1)
 }
+
+plot_post_deaths <- function(results) {
+  results %>%
+    select(sub_region, daily_data) %>%
+    unnest(daily_data) %>%
+    select(sub_region, day_index, date, new_deaths, param_results) %>%
+    unnest(param_results) %>%
+    filter(fct_match(parameter, "deaths_rep")) %>%
+    ggplot() +
+    geom_ribbon(aes(x = day_index, ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
+    geom_line(aes(x = day_index, y = new_deaths)) +
+    labs(caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.") +
+    facet_wrap(vars(sub_region), scales = "free_y") +
+    NULL
+}
