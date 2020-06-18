@@ -25,6 +25,22 @@ extract_parameters <- function(fit, ...) {
     as_tibble()
 }
 
+extract_toplevel_results <- function(fit, par, exp_logs = TRUE) {
+  fit %>%
+    extract_parameters(par = par) %>%
+    bind_rows(
+      filter(., str_detect(parameters, "log")) %>%
+        mutate(iter_data = map(iter_data, exp),
+               parameters = str_remove(parameters, "log_?"))
+    ) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
 extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
   fit %>%
     extract_parameters(par = par) %>%
