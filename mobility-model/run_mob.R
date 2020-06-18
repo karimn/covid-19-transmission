@@ -1,4 +1,4 @@
-#!/usr/bin/Rscript
+#!/bin/Rscript
 
 "Usage:
   run_mob (fit | prior) [<country-code> ...] [options]
