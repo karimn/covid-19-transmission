@@ -8,7 +8,7 @@
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "data/cleaned.csv data/mobility/cleaned_subnat_data.csv") # Add the files here if running interactively
+  docopt::docopt(opt_desc, "data/mergecleaned.csv data/mobility/cleaned_subnat_data.csv") # Add the files here if running interactively
 } else {
   root_path <- ".."
 
@@ -28,13 +28,16 @@ source(file.path(root_path, "mobility-model", "constants.R"))
 
 subnat_data_raw <- read_csv(
   script_options$`raw-data-file`,
-  col_types = cols("subregion1_code" = col_character(),
+  col_types = cols("new_recovered" = col_integer(),
+                   "total_recovered" = col_integer(),
+                   "subregion1_name" = col_character(),
+                   "subregion1_code" = col_character(),
                    "subregion2_code" = col_character(),
                    "subregion2_name" = col_character())
 )
 
 subnat_data <- subnat_data_raw %>%
-  rename(subnat_day_index = X1) %>%
+  # rename(subnat_day_index = X1) %>%
   left_join(transmute(countrycode::codelist, country_code = iso2c, countrycode_iso3n = iso3n), by = "country_code") %>% # Getting the countrycode
   rename_at(vars(matches("^(mobility|total)_")), str_replace_all, c("^mobility_" = "g_", "^total_" = "cum_")) %>%
   rename_at(vars(matches("(confirmed|deceased)$")), str_replace_all, c("confirmed$" = "cases", "deceased$" = "deaths")) %>%
@@ -87,17 +90,6 @@ subnat_data %<>%
                                    max()) %>%
       lubridate::as_date(),
 
-    daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
-
-    epidemic_start_date = map_dbl(daily_data,
-                                  ~ filter(.x, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths
-                                    pull(date) %>%
-                                    min()) %>%
-      lubridate::as_date() %>%
-      add(1), # The day after
-
-    first_infection_seeding_day = epidemic_start_date - 1 - seeding_days_before_epidemic, # 30 days before the first day with >=10 deaths
-
     first_mob_day = map_dbl(daily_data,
                        ~ filter(.x, all_mob_observed) %>%
                          pull(date) %>%
@@ -110,11 +102,23 @@ subnat_data %<>%
                          max()) %>%
       lubridate::as_date(),
 
+    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day),
+
+    daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
+
+    epidemic_start_date = map_dbl(daily_data,
+                                  ~ filter(.x, cum_deaths >= min_deaths_day_before_epidemic) %>% # First day with >= 10 deaths
+                                    pull(date) %>%
+                                    min()) %>%
+      lubridate::as_date() %>%
+      add(1), # The day after
+
+    first_infection_seeding_day = epidemic_start_date - 1 - seeding_days_before_epidemic, # 30 days before the first day with >=10 deaths
+
     last_effective_observed_day = pmin(last_observed_death, last_mob_day), # We need both deaths and mobility day for the tail end of observed data (used in likelihood)
     num_days_observed = last_effective_observed_day - first_infection_seeding_day + 1,
   ) %>%
   mutate(
-    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day),
     has_epidemic = is_valid & is.finite(epidemic_start_date),
 
     daily_data = pmap(lst(daily_data, first_infection_seeding_day, last_effective_observed_day, is_valid = has_epidemic), clean_date_ranges) %>%
