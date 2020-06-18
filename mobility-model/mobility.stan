@@ -156,6 +156,7 @@ parameters {
 
 transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
+  vector[use_log_R0 && hierarchical_R0_model ? N_national : 0] national_effect_log_R0;
   vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
   // vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
@@ -169,7 +170,8 @@ transformed parameters {
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
   if (use_log_R0 && hierarchical_R0_model) {
-    subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N - num_singleton_countries);
+    national_effect_log_R0 = rep_vector(0, N_national);
+    subnational_effect_log_R0 = rep_vector(0, N - num_singleton_countries);
   }
 
   {
@@ -194,7 +196,8 @@ transformed parameters {
         }
 
         if (use_log_R0 && hierarchical_R0_model) {
-          log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          national_effect_log_R0[country_index] = national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0[country_index];
         }
       }
 
