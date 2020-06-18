@@ -8,7 +8,7 @@
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "data/mergecleaned.csv data/mobility/cleaned_subnat_data.csv") # Add the files here if running interactively
+  docopt::docopt(opt_desc, "data/mergecleaned.csv data/mobility/cleaned_subnat_data.rds") # Add the files here if running interactively
 } else {
   root_path <- ".."
 
@@ -128,7 +128,9 @@ subnat_data %<>%
       map(mutate, average_mob = (g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 4,
                   average_all_mob = (g_transit_stations + g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 5) %>%
       map(arrange, date) %>%
-      map(mutate, day_index = seq(n()))
+      map(mutate, day_index = seq(n())),
+
+    country_index = group_indices(., country_code) # For SLURM runs on cluster server
   )
 
 write_rds(subnat_data, path = script_options$`output-data-file`)
