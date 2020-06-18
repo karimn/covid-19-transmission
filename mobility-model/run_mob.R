@@ -26,7 +26,8 @@ script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
-  docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
+  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
+  docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes}")
 } else {
   root_path <- ".."
 
@@ -66,9 +67,6 @@ if (!is_null(script_options$`no-partial-pooling`)) {
     error = function(err) stop("Unexpected value for --no-partial-pooling")
   )
 }
-
-save_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , ".RData"))
-save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , "_results.rds"))
 
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "constants.R"))
@@ -150,14 +148,33 @@ subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat
   subnat_data %<>%
     left_join(ifr_adj, by = c("countrycode_iso3n" = "country_code"))
 
-  use_subnat_data <- subnat_data %>%
-      filter(has_epidemic,
-             is_empty(script_options$`country-code`) | fct_match(country_code, script_options$`country-code`))
+  if (!is_empty(script_options$`country-code`)) {
+    if (all(str_detect(script_options$`country-code`, "^\\d+$"))) {
+      cat("\nFiltering countries by index...")
+      use_subnat_data <- subnat_data %>%
+        filter(country_index %in% as.integer(script_options$`country-code`))
+      cat("done.\n")
+    } else {
+      cat("\nFiltering countries by code...")
+      use_subnat_data <- subnat_data %>%
+        filter(fct_match(country_code, script_options$`country-code`))
+      cat("done.\n")
+    }
+  } else {
+    use_subnat_data <- subnat_data
+  }
 # }
 
 if (any(!use_subnat_data$is_valid)) {
   warning("{nrow(filter(use_subnat_data, !is_valid))} rows found with invalid data.")
 }
+
+if (any(!use_subnat_data$has_epidemic)) {
+  cat(str_glue("\n{sum(!use_subnat_data$has_epidemic)} subregions found without an epidemic. Removing them.\n"))
+}
+
+use_subnat_data %<>%
+    filter(has_epidemic)
 
 if (!is_empty(script_options$`rand-sample-subnat`)) {
   if (n_distinct(use_subnat_data$country_code) > 1) {
@@ -195,6 +212,15 @@ if (!is_empty(script_options$`merge-days`)) {
 
   cat("done.\n")
 }
+
+all_country_codes <- use_subnat_data %>%
+  pull(country_code) %>%
+  unique() %>%
+  str_to_lower() %>%
+  str_c(collapse = "_")
+
+save_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), ".RData"))
+save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), "_results.rds"))
 
 # Time to Death -----------------------------------------------------------
 
