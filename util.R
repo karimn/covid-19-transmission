@@ -192,3 +192,9 @@ render_country_reports <- function(results, report_template = file.path("mobilit
                              knit_root_dir = ".."))
 
 }
+
+trim_iter_data <- function(results) {
+  results %>%
+    mutate(param_results = map(param_results, select, -iter_data),
+           daily_data = map(daily_data, mutate, param_results = map(param_results, select, - iter_data)))
+}
