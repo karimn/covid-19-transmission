@@ -18,6 +18,7 @@ Options:
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-post-predict  Don't do posterior prediction
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
+  --show-script-options  
 " -> opt_desc
 
 script_options <- if (interactive()) {
@@ -38,6 +39,10 @@ script_options <- if (interactive()) {
   docopt::docopt(opt_desc)
 }
 
+if (script_options$`show-script-options`) {
+  print(script_options)
+}
+
 library(magrittr)
 library(tidyverse)
 library(wpp2019)
@@ -52,7 +57,7 @@ if (script_options$cmdstan) {
   library(cmdstanr)
 } else {
   library(rstan)
-  options(mc.cores = max(1, parallel::detectCores()))
+  options(mc.cores = script_options$chains) # max(1, parallel::detectCores()))
   rstan_options(auto_write = TRUE)
 }
 
