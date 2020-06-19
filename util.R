@@ -185,5 +185,10 @@ render_country_reports <- function(results, report_template = file.path("mobilit
   results %>%
     pull(country_code) %>%
     unique() %>%
-    walk(~ rmarkdown::render(report_template, output_file = str_c(str_to_lower(.x), "_report.pdf"), output_dir = reports_dir, params = list(country_code = .x)))
+    walk(~ rmarkdown::render(report_template,
+                             output_file = str_c(str_to_lower(.x), "_report.pdf"),
+                             output_dir = reports_dir,
+                             params = list(country_code = .x),
+                             knit_root_dir = ".."))
+
 }
