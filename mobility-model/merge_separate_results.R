@@ -7,7 +7,7 @@
 library(magrittr)
 library(tidyverse)
 
-if (interactive()) {
+script_options <- if (interactive()) {
   root_path <- "."
 
   docopt::docopt(opt_desc, "")
