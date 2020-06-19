@@ -2,7 +2,7 @@
 
 #SBATCH -n 4                # Number of cores (-n)
 #SBATCH -N 1                # Ensure that all cores are on one Node (-N)
-#SBATCH -t 0-04:00          # Runtime in D-HH:MM, minimum of 10 minutes
+#SBATCH -t 0-08:00          # Runtime in D-HH:MM, minimum of 10 minutes
 #SBATCH -p shared           # serial_requeue   # Partition to submit to
 #SBATCH --mem=8000 # 8GB    # Memory pool for all cores (see also --mem-per-cpu)
 #SBATCH -o ../temp/log/mob_%A_%a.log  # File to which STDOUT will be written, %j inserts jobid
