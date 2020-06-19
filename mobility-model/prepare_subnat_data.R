@@ -102,7 +102,7 @@ subnat_data %<>%
                          max()) %>%
       lubridate::as_date(),
 
-    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day),
+    is_valid = is.finite(first_observed_death) & is.finite(first_mob_day) & !is.na(population),
 
     daily_data = map2(daily_data, first_observed_death, clean_missing_spread),
 
