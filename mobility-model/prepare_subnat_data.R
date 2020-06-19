@@ -57,6 +57,7 @@ clean_missing_spread <- function(daily_data, first_observed_death) {
   if (is.finite(first_observed_death)) {
     daily_data %>%
       mutate(
+        new_deaths = if_else(is.na(new_deaths), 0, new_deaths),
         cum_deaths = if_else(is.na(cum_deaths) & date < first_observed_death, 0, cum_deaths),
         new_deaths = if_else(is.na(new_deaths), cum_deaths - lag(cum_deaths, default = 0), new_deaths),
         cum_deaths = if_else(is.na(cum_deaths), cumsum(new_deaths), cum_deaths),
