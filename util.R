@@ -116,7 +116,7 @@ plot_day_data <- function(results, par, use_date = FALSE) {
     select(country_code, sub_region, daily_data) %>%
     unnest(daily_data) %>%
     select(sub_region, day_index, date, all_of(par)) %>%
-    pivot_longer(par) %>%
+    pivot_longer(all_of(par)) %>%
     ggplot(time_aes) +
     geom_line(y_aes) +
     scale_color_discrete("") +
@@ -179,4 +179,11 @@ plot_post_deaths <- function(results) {
     labs(caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.") +
     facet_wrap(vars(sub_region), scales = "free_y") +
     NULL
+}
+
+render_country_reports <- function(results, report_template = file.path("mobility-model", "mobility_report.Rmd"), reports_dir = file.path("mobility-model", "country-reports")) {
+  results %>%
+    pull(country_code) %>%
+    unique() %>%
+    walk(~ rmarkdown::render(report_template, output_file = str_c(str_to_lower(.x), "_report.pdf"), output_dir = reports_dir, params = list(country_code = .x)))
 }
