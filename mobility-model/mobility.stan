@@ -165,6 +165,8 @@ transformed parameters {
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
   row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
 
+  vector[D_total] adj_factor;
+
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
@@ -237,9 +239,10 @@ transformed parameters {
           int curr_day_pos = days_pos + day_index - 1;
 
           if (day_index > days_to_impute_cases) {
-            real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
+            // real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
+            adj_factor[curr_day_pos] = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
 
-            Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
+            Rt_adj[curr_day_pos] = adj_factor[curr_day_pos] * Rt[curr_day_pos];
 
             new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
           } else {

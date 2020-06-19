@@ -18,7 +18,7 @@ Options:
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-post-predict  Don't do posterior prediction
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
-  --show-script-options  
+  --show-script-options
 " -> opt_desc
 
 script_options <- if (interactive()) {
@@ -471,7 +471,7 @@ tryCatch({
   subnat_results <- mob_fit %>%
     extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases"))
 
-  day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
+  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
 
   if (!script_options$`no-post-predict` && !script_options$prior) {
     day_param %<>% c("deaths_rep")
