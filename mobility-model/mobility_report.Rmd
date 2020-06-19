@@ -21,6 +21,8 @@ library(haven)
 library(latex2exp)
 library(rstan)
 
+source("util.R")
+
 ggplot2::theme_set(theme_minimal())
 
 knitr::opts_chunk$set(echo = FALSE)
