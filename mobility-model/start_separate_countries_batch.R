@@ -40,8 +40,8 @@ countries <- if (!is_empty(script_options$countries)) {
 }
 
 job_country_dict <- subnat_data %>%
-  filter(country_index %in% countries) %>%
-  select(country_index, country_code, country_name)
+  filter(country_index %in% as.integer(c(str_split(countries, ",", simplify = TRUE)))) %>%
+  distinct(country_index, country_code, country_name) 
 
 if (!script_options$`no-sbatch`) {
   batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
