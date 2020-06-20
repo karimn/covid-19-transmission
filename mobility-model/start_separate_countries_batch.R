@@ -58,7 +58,5 @@ if (!script_options$`no-sbatch`) {
     mutate(job_id)
 }
 
-if (!is_empty(script_options$`dict-file`)) {
-  write_rds(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".rds"))
-}
+write_rds(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".rds"))
 
