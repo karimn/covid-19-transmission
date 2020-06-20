@@ -2,7 +2,7 @@
 
 stringr::str_glue(
 "Usage:
-  start_separate_countries_batch.R [<countries> | --exclude-us]
+  start_separate_countries_batch.R [<countries> | --exclude-us] [--no-sbatch --dict-file=<file name>]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
@@ -22,11 +22,11 @@ script_options <- if (interactive()) {
 library(magrittr, quietly = TRUE, warn.conflicts = FALSE)
 library(tidyverse, quietly = TRUE, warn.conflicts = FALSE)
 
+subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
+
 countries <- if (!is_empty(script_options$countries)) {
   script_options$countries
 } else {
-  subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
-
   subnat_data %>%
     filter(has_epidemic) %>%
     semi_join(count(., country_code) %>% filter(n > 1), by = "country_code") %>% {
@@ -39,9 +39,24 @@ countries <- if (!is_empty(script_options$countries)) {
     str_c(collapse = ",")
 }
 
-batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
+job_country_dict <- subnat_data %>%
+  filter(country_index %in% countries) %>%
+  select(country_index, country_code, country_name)
 
-cat("Running:", batchcmd, "\n")
+if (!script_options$`no-sbatch`) {
+  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
 
-system(batchcmd)
+  cat("Running:", batchcmd, "\n")
+
+  job_id <- system(batchcmd, intern = TRUE)
+
+  cat("Submitted job", job_id, "\n")
+
+  job_country_dict %<>%
+    mutate(job_id)
+}
+
+if (!is_empty(script_options$`dict-file`)) {
+  write_rds(job_country_dict, script_options$`dict-file`)
+}
 
