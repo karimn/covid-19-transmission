@@ -20,7 +20,7 @@ ggplot2::theme_set(theme_minimal())
 
 ```{r}
 library(tidyverse)
-results <- readRDS("../data/mobility/results/clean/lite_merged.rds")
+results <- readRDS("../data/mobility/results/lite_merged.rds")
 ```
 
 
