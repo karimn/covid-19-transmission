@@ -165,7 +165,7 @@ transformed parameters {
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
   row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
 
-  vector[D_total] adj_factor;
+  vector[D_total] adj_factor = rep_vector(1, D_total);
 
   matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
@@ -185,7 +185,7 @@ transformed parameters {
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
-      int full_subnat_end = subnat_pos + num_subnat - 1;
+      int full_subnat_end = full_subnat_pos + num_subnat - 1;
       int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
 
       if (is_multinational) {
@@ -211,7 +211,7 @@ transformed parameters {
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_full_subnat_pos = full_subnat_pos + subnat_index - 1;
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int days_end = days_pos + days_observed[curr_subnat_pos] + days_to_forecast - 1;
+        int days_end = days_pos + days_observed[curr_full_subnat_pos] + days_to_forecast - 1;
 
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
@@ -235,16 +235,17 @@ transformed parameters {
           Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
         }
 
-        for (day_index in 1:total_days[curr_subnat_pos]) {
+        for (day_index in 1:total_days[curr_full_subnat_pos]) {
           int curr_day_pos = days_pos + day_index - 1;
 
-          if (day_index > days_to_impute_cases) {
-            // real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
+          if (day_index > 1) {
             adj_factor[curr_day_pos] = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
 
-            Rt_adj[curr_day_pos] = adj_factor[curr_day_pos] * Rt[curr_day_pos];
+            if (day_index > days_to_impute_cases) {
+              Rt_adj[curr_day_pos] = adj_factor[curr_day_pos] * Rt[curr_day_pos];
 
-            new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+              new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+            }
           } else {
             Rt_adj[curr_day_pos] = Rt[curr_day_pos];
           }
