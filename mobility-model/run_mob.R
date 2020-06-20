@@ -387,7 +387,7 @@ make_initializer <- function(stan_data) {
   }
 }
 
-cat(str_glue("Running model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
+cat(str_glue("\nRunning model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
   count(country_name) %$% {
     cat(str_glue("\n\t{country_name}: {n} sub regions.\n\n"))
