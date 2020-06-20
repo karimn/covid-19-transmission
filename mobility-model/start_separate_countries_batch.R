@@ -2,7 +2,7 @@
 
 stringr::str_glue(
 "Usage:
-  start_separate_countries_batch.R [<countries> | --exclude-us] [--no-sbatch --dict-file=<file name>]
+  start_separate_countries_batch.R [<countries> | --exclude-us] [--no-sbatch]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
@@ -41,7 +41,9 @@ countries <- if (!is_empty(script_options$countries)) {
 
 job_country_dict <- subnat_data %>%
   filter(country_index %in% as.integer(c(str_split(countries, ",", simplify = TRUE)))) %>%
-  distinct(country_index, country_code, country_name) 
+  distinct(country_index, country_code, country_name)
+
+job_id <- NULL
 
 if (!script_options$`no-sbatch`) {
   batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
@@ -57,6 +59,6 @@ if (!script_options$`no-sbatch`) {
 }
 
 if (!is_empty(script_options$`dict-file`)) {
-  write_rds(job_country_dict, script_options$`dict-file`)
+  write_rds(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".rds"))
 }
 
