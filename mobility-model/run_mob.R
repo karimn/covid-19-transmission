@@ -20,6 +20,7 @@ Options:
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
+  --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
@@ -35,7 +36,8 @@ script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
-  docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
+  # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
+  docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
 } else {
   root_path <- ".."
 
@@ -218,6 +220,18 @@ if (!is_empty(script_options$`merge-days`)) {
     )
 
   cat("done.\n")
+}
+
+if (script_options$`countries-as-subregions`) {
+  if (any(pull(count(use_subnat_data, country_code), n) > 1)) {
+    stop("--countries-as-subregions only allowed for countries with a single subregion.")
+  }
+
+  use_subnat_data %<>%
+    mutate(sub_region = str_c(country_code, country_name, sep = "_"),
+           country_code = "XX",
+           country_index = 0,
+           country_name = "World")
 }
 
 all_country_codes <- use_subnat_data %>%
