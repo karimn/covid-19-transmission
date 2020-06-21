@@ -32,8 +32,8 @@ merged_results <- dir(script_options$location, pattern = str_glue("\\w{{2}}_\\d+
     results = list(read_rds(.x))
   )) %>%
   tidyr::extract(results_file, "job_id", "\\w{2}_\\d+_(\\d+)", remove = FALSE) %>%
-  left_join(diagnostics_data, by = c("job_id", "country_index")) %>%
-  unnest(results)
+  unnest(results) %>%
+  left_join(diagnostics_data, by = c("job_id", "country_index"))
 
 if (script_options$lite) {
   merged_results %<>%
