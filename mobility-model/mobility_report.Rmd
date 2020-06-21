@@ -3,6 +3,7 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
+  results_file: lite_merged_epi3deaths.rds
   country_code: IT
 ---
 
@@ -29,7 +30,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r}
-results <- read_rds(file.path("data", "mobility", "results", "clean", "merged.rds")) %>% 
+results <- read_rds(file.path("data", "mobility", "results", params$results_file)) %>% 
   filter(fct_match(country_code, params$country_code))
 
 country_name <- results$country_name %>% unique()
@@ -39,6 +40,14 @@ country_name <- results$country_name %>% unique()
 ---
 title: `r country_name`
 ---
+
+Number of divergent transitions = `r first(results$divergent_trans)`
+
+Maximum $\hat{R}$ = `r first(results$max_rhat)`
+
+Minimum Bulk ESS = `r first(results$min_ess_bulk)`
+
+Minimum Tail ESS = `r first(results$min_ess_tail)`
 
 ```{r R0-plot, fig.width=10}
 results %>% 
@@ -60,6 +69,11 @@ results %>%
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
+```{r adj-factor-plot, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_ci(par = "adj_factor", use_date = TRUE) +
+  labs(title = TeX("S_{t,m}")) 
+```
 
 ```{r last-Rt-plot, fig.height=4, fig.width=10}
 results %>% 
@@ -68,7 +82,7 @@ results %>%
   labs(title = TeX("$R_{t,m}$ on the last day")) 
 ```
 
-```{r in-post-deaths, fig.width=14}
+```{r post-deaths, fig.width=14}
 results %>% 
   plot_post_deaths()
 ```
