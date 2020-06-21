@@ -24,12 +24,10 @@ script_options <- if (interactive()) {
 diagnostics_data <- read_tsv(script_options$diagnostics, col_names = c("job_id", "country_index", "divergent_trans", "max_rhat", "min_ess_bulk", "min_ess_tail"))
 
 merged_results <- dir(script_options$location, pattern = "\\w{2}_\\d+_\\d+_mob_results\\.rds$", full.names = TRUE) %>%
-  map_dfr({
-    tibble(
-      results_file = .x,
-      results = list(read_rds(.x))
-    )
-  }) %>%
+  map_dfr(~ tibble(
+    results_file = .x,
+    results = list(read_rds(.x))
+  )) %>%
   tidyr::extract(results_file, "job_id", "\\w{2}_\\d+_(\\d+)", remove = FALSE) %>%
   left_join(diagnostics_data, by = c("job_id", "country_index")) %>%
   unnest(results)
