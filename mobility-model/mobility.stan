@@ -171,6 +171,8 @@ transformed parameters {
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
+  vector[N] ifr = mean_ifr .* ifr_noise;
+
   if (use_log_R0 && hierarchical_R0_model) {
     national_effect_log_R0 = rep_vector(0, N_national);
     subnational_effect_log_R0 = rep_vector(0, N - num_singleton_countries);
@@ -180,8 +182,6 @@ transformed parameters {
     int full_subnat_pos = 1; // The "full" pointers do not exclude subnational entities in singleton countries (have only one subnational entity)
     int subnat_pos = 1;
     int days_pos = 1;
-
-    vector[N] ifr = mean_ifr .* ifr_noise;
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];

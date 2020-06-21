@@ -485,7 +485,7 @@ tryCatch({
   cat("\n\n")
 
   subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases"))
+    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
 
