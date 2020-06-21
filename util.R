@@ -284,20 +284,23 @@ plot_post_deaths <- function(results) {
     select(sub_region, day_index, date, new_deaths, param_results) %>%
     unnest(param_results) %>%
     filter(fct_match(parameter, "deaths_rep")) %>%
-    ggplot() +
-    geom_ribbon(aes(x = day_index, ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
-    geom_line(aes(x = day_index, y = new_deaths)) +
-    labs(caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.") +
+    ggplot(aes(x = date)) +
+    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
+    geom_line(aes(y = new_deaths)) +
+    labs(x = "", y = "New Deaths", caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.") +
     facet_wrap(vars(sub_region), scales = "free_y") +
     NULL
 }
 
-render_country_reports <- function(results, report_template = file.path("mobility-model", "mobility_report.Rmd"), reports_dir = file.path("mobility-model", "country-reports")) {
+render_country_reports <- function(results,
+                                   report_template = file.path("mobility-model", "mobility_report.Rmd"),
+                                   reports_dir = file.path("mobility-model", "country-reports"),
+                                   reports_id = NULL) {
   results %>%
     pull(country_code) %>%
     unique() %>%
     walk(~ rmarkdown::render(report_template,
-                             output_file = str_c(str_to_lower(.x), "_report.pdf"),
+                             output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", collapse = "_"),
                              output_dir = reports_dir,
                              params = list(country_code = .x),
                              knit_root_dir = ".."))
