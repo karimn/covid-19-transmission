@@ -4,9 +4,6 @@
   merge_separate_results <location> <destination> <diagnostics> [--lite]
 " -> opt_desc
 
-library(magrittr)
-library(tidyverse)
-
 script_options <- if (interactive()) {
   root_path <- "."
 
@@ -20,6 +17,9 @@ script_options <- if (interactive()) {
 
   docopt::docopt(opt_desc)
 }
+
+library(magrittr)
+library(tidyverse)
 
 diagnostics_data <- read_tsv(script_options$diagnostics, col_names = c("job_id", "country_index", "divergent_trans", "max_rhat", "min_ess_bulk", "min_ess_tail"))
 
