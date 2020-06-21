@@ -14,15 +14,17 @@ script_options <- if (interactive()) {
 } else {
   root_path <- ".."
 
-  setwd(root_path)
+  old_dir <- setwd(root_path)
   source(file.path("renv", "activate.R"))
-  setwd("mobility-model")
+  setwd(old_dir)
 
   docopt::docopt(opt_desc)
 }
 
 library(magrittr)
 library(tidyverse)
+
+source(file.path(root_path, "util.R"))
 
 diagnostics_data <- read_tsv(script_options$diagnostics,
                              col_names = c("job_id", "country_index", "divergent_trans", "max_rhat", "min_ess_bulk", "min_ess_tail"),
