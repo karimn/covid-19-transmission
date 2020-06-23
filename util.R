@@ -300,7 +300,7 @@ render_country_reports <- function(results,
     pull(country_code) %>%
     unique() %>%
     walk(~ rmarkdown::render(report_template,
-                             output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", collapse = "_"),
+                             output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", sep = "_"),
                              output_dir = reports_dir,
                              params = list(country_code = .x),
                              knit_root_dir = ".."))
