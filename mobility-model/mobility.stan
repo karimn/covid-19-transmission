@@ -86,8 +86,8 @@ transformed data {
 
   matrix[D, num_coef] centered_design_matrix; // E.g., mobility
   matrix[D, num_coef] qr_Q_mat;
-  matrix[num_coef, num_coef] qr_R_mat;
-  matrix[num_coef, num_coef] qr_inv_R_mat;
+  matrix[num_coef * N, num_coef] qr_R_mat;
+  matrix[num_coef * N, num_coef] qr_inv_R_mat;
 
   {
     real gen_factor_alpha = 1 / (0.62^2);              // alpha = 1 / tau^2;
@@ -112,15 +112,35 @@ transformed data {
     }
   }
 
+  // TODO QR decomposition should be done at each subnational level
+  // https://discourse.mc-stan.org/t/qr-reparametrization-in-multilevel-models/6929
+
   {
     int lkh_pos = 1;
+    int days_pos = 1;
+    int qr_coef_pos = 1;
 
     for (subnat_index in 1:N) {
+      int curr_days_observed = days_observed[subnat_index];
+      int days_end = days_pos + curr_days_observed + days_to_forecast - 1;
+      int qr_coef_end = qr_coef_pos + num_coef - 1;
+
       for (lkh_day_index in 1:num_likelihood_days[subnat_index]) {
         likelihood_day_idx[lkh_pos] = start_epidemic_offset + lkh_day_index - 1;
         day_subnat_idx[lkh_pos] = subnat_index;
         lkh_pos += 1;
       }
+
+      for (coef_index in 1:num_coef) {
+        centered_design_matrix[days_pos:days_end, coef_index] = design_matrix[days_pos:days_end, coef_index] - mean(design_matrix[days_pos:days_end, coef_index]);
+      }
+
+      qr_Q_mat[days_pos:days_end] = qr_thin_Q(centered_design_matrix[days_pos:days_end]) * sqrt(curr_days_observed - 1);
+      qr_R_mat[qr_coef_pos:qr_coef_end] = qr_thin_R(centered_design_matrix[days_pos:days_end]) / sqrt(curr_days_observed - 1);
+      qr_inv_R_mat[qr_coef_pos:qr_coef_end] = inverse(qr_R_mat[qr_coef_pos:qr_coef_end]);
+
+      days_pos = days_end + 1;
+      qr_coef_pos = qr_coef_end + 1;
     }
   }
 
@@ -130,16 +150,6 @@ transformed data {
     }
   }
 
-  // TODO QR decomposition should be done at each subnational level
-  // https://discourse.mc-stan.org/t/qr-reparametrization-in-multilevel-models/6929
-
-  for (coef_index in 1:num_coef) {
-    centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
-  }
-
-  qr_Q_mat = qr_thin_Q(centered_design_matrix) * sqrt(D - 1);
-  qr_R_mat = qr_thin_R(centered_design_matrix) / sqrt(D - 1);
-  qr_inv_R_mat = inverse(qr_R_mat);
 }
 
 parameters {
@@ -176,6 +186,7 @@ transformed parameters {
 
 
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
+  vector[use_log_R0 && hierarchical_R0_model ? N_national : 0] national_effect_log_R0;
   vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
   // vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] mean_deaths; // Not a matrix; this could be a ragged data structure
@@ -184,12 +195,17 @@ transformed parameters {
   vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] Rt_adj = Rt;
   row_vector<lower = (use_transformed_param_constraints ? 0 : negative_infinity())>[D_total] new_cases = rep_row_vector(0, D_total);
 
+  vector[D_total] adj_factor = rep_vector(1, D_total);
+
   // matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
+  vector[N] ifr = mean_ifr .* ifr_noise;
+
   if (use_log_R0 && hierarchical_R0_model) {
-    subnational_effect_log_R0 = rep_vector(toplevel_log_R0, N - num_singleton_countries);
+    national_effect_log_R0 = rep_vector(0, N_national);
+    subnational_effect_log_R0 = rep_vector(0, N - num_singleton_countries);
   }
 
   {
@@ -197,11 +213,9 @@ transformed parameters {
     int subnat_pos = 1;
     int days_pos = 1;
 
-    vector[N] ifr = mean_ifr .* ifr_noise;
-
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
-      int full_subnat_end = subnat_pos + num_subnat - 1;
+      int full_subnat_end = full_subnat_pos + num_subnat - 1;
       int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
 
       if (is_multinational) {
@@ -214,7 +228,8 @@ transformed parameters {
         }
 
         if (use_log_R0 && hierarchical_R0_model) {
-          log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          national_effect_log_R0[country_index] = national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0[country_index];
         }
       }
 
@@ -226,7 +241,7 @@ transformed parameters {
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_full_subnat_pos = full_subnat_pos + subnat_index - 1;
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int days_end = days_pos + days_observed[curr_subnat_pos] + days_to_forecast - 1;
+        int days_end = days_pos + days_observed[curr_full_subnat_pos] + days_to_forecast - 1;
 
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
@@ -238,7 +253,7 @@ transformed parameters {
           }
         }
 
-        new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[subnat_index] * time_resolution, days_to_impute_cases);
+        new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[curr_full_subnat_pos] * time_resolution, days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
           mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
@@ -250,15 +265,19 @@ transformed parameters {
           Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
         }
 
-        for (day_index in 1:total_days[curr_subnat_pos]) {
+        for (day_index in 1:total_days[curr_full_subnat_pos]) {
           int curr_day_pos = days_pos + day_index - 1;
 
-          if (day_index > days_to_impute_cases) {
-            real adjust_factor = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
+          if (day_index > 1) {
+            adj_factor[curr_day_pos] = 1 - (cumulative_cases[day_index - 1] / population[curr_full_subnat_pos]);
 
-            Rt_adj[curr_day_pos] = adjust_factor * Rt[curr_day_pos];
+            if (day_index > days_to_impute_cases) {
+              Rt_adj[curr_day_pos] = adj_factor[curr_day_pos] * Rt[curr_day_pos];
 
-            new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+              new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+            } else {
+              Rt_adj[curr_day_pos] = Rt[curr_day_pos];
+            }
           } else {
             Rt_adj[curr_day_pos] = Rt[curr_day_pos];
           }

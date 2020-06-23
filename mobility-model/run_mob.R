@@ -1,5 +1,10 @@
-#!/usr/bin/Rscript
+#!/bin/Rscript
 
+root_path <- if (interactive()) "." else ".."
+
+source(file.path(root_path, "mobility-model", "constants.R"))
+
+stringr::str_glue(
 "Usage:
   run_mob (fit | prior) [<country-code> ...] [options]
 
@@ -13,12 +18,16 @@ Options:
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
-  --cmdstan  Use {cmdstanr} instead of {rstan}
+  --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
+  --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
+  --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
+  --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-post-predict  Don't do posterior prediction
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
-" -> opt_desc
+  --show-script-options
+") -> opt_desc
 
 script_options <- if (interactive()) {
   root_path <- "."
@@ -26,7 +35,9 @@ script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
-  docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
+  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
+  # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
+  docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
 } else {
   root_path <- ".."
 
@@ -37,12 +48,16 @@ script_options <- if (interactive()) {
   docopt::docopt(opt_desc)
 }
 
+if (script_options$`show-script-options`) {
+  print(script_options)
+}
+
 library(magrittr)
 library(tidyverse)
 library(wpp2019)
 
 script_options %<>%
-  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days"), as.integer) %>%
+  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
   # modify_at(c(), as.numeric)
@@ -51,7 +66,7 @@ if (script_options$cmdstan) {
   library(cmdstanr)
 } else {
   library(rstan)
-  options(mc.cores = max(1, parallel::detectCores()))
+  options(mc.cores = script_options$chains) # max(1, parallel::detectCores()))
   rstan_options(auto_write = TRUE)
 }
 
@@ -67,11 +82,8 @@ if (!is_null(script_options$`no-partial-pooling`)) {
   )
 }
 
-save_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , ".RData"))
-save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(script_options$output , "_results.rds"))
-
 source(file.path(root_path, "util.R"))
-source(file.path(root_path, "mobility-model", "constants.R"))
+source(file.path(root_path, "mobility-model", "mob_util.R"))
 
 # Population Data For IFR -------------------------------------------------
 
@@ -138,26 +150,41 @@ ita_ifr_data <- read_csv(file.path(root_path, "data", "population", "ita_ifr.csv
 
 # Subnational Deaths Data -------------------------------------------------
 
-subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
+subnat_data <- if (is_empty(script_options$`epidemic-cutoff`)) {
+  read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
+} else {
+  prepare_subnat_data(script_options$`raw-data-file`, script_options$`epidemic-cutoff`)
+}
 
-# if (length(script_options$`country-code`) == 1 && script_options$`country-code` == "IT") { # Using the same IFR as Vollmer et al. to check for differences in estimation
-#   use_subnat_data <- subnat_data %>%
-#     filter(has_epidemic,
-#            fct_match(country_code, "IT")) %>%
-#     select(-population) %>%
-#     left_join(ita_ifr_data, by = "sub_region")
-# } else {
-  subnat_data %<>%
-    left_join(ifr_adj, by = c("countrycode_iso3n" = "country_code"))
+subnat_data %<>%
+  left_join(ifr_adj, by = c("countrycode_iso3n" = "country_code"))
 
-  use_subnat_data <- subnat_data %>%
-      filter(has_epidemic,
-             is_empty(script_options$`country-code`) | fct_match(country_code, script_options$`country-code`))
-# }
+if (!is_empty(script_options$`country-code`)) {
+  if (all(str_detect(script_options$`country-code`, "^\\d+$"))) {
+    cat("\nFiltering countries by index...")
+    use_subnat_data <- subnat_data %>%
+      filter(country_index %in% as.integer(script_options$`country-code`))
+    cat("done.\n")
+  } else {
+    cat("\nFiltering countries by code...")
+    use_subnat_data <- subnat_data %>%
+      filter(fct_match(country_code, script_options$`country-code`))
+    cat("done.\n")
+  }
+} else {
+  use_subnat_data <- subnat_data
+}
 
 if (any(!use_subnat_data$is_valid)) {
   warning("{nrow(filter(use_subnat_data, !is_valid))} rows found with invalid data.")
 }
+
+if (any(!use_subnat_data$has_epidemic)) {
+  cat(str_glue("\n{sum(!use_subnat_data$has_epidemic)} subregions found without an epidemic. Removing them.\n"))
+}
+
+use_subnat_data %<>%
+    filter(has_epidemic)
 
 if (!is_empty(script_options$`rand-sample-subnat`)) {
   if (n_distinct(use_subnat_data$country_code) > 1) {
@@ -195,6 +222,27 @@ if (!is_empty(script_options$`merge-days`)) {
 
   cat("done.\n")
 }
+
+if (script_options$`countries-as-subregions`) {
+  if (any(pull(count(use_subnat_data, country_code), n) > 1)) {
+    stop("--countries-as-subregions only allowed for countries with a single subregion.")
+  }
+
+  use_subnat_data %<>%
+    mutate(sub_region = str_c(country_code, country_name, sep = "_"),
+           country_code = "XX",
+           country_index = 0,
+           country_name = "World")
+}
+
+all_country_codes <- use_subnat_data %>%
+  pull(country_code) %>%
+  unique() %>%
+  str_to_lower() %>%
+  str_c(collapse = "_")
+
+save_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), ".RData"))
+save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), "_results.rds"))
 
 # Time to Death -----------------------------------------------------------
 
@@ -354,7 +402,7 @@ make_initializer <- function(stan_data) {
   }
 }
 
-cat(str_glue("Running model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
+cat(str_glue("\nRunning model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
   count(country_name) %$% {
     cat(str_glue("\n\t{country_name}: {n} sub regions.\n\n"))
@@ -438,9 +486,9 @@ tryCatch({
   cat("\n\n")
 
   subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases"))
+    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
 
-  day_param <- c("Rt", "Rt_adj", "mobility_effect", "mean_deaths")
+  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
 
   if (!script_options$`no-post-predict` && !script_options$prior) {
     day_param %<>% c("deaths_rep")
@@ -480,6 +528,3 @@ finally = {
   save(mob_fit, stan_data, file = save_file)
   cat("done.\n")
 })
-
-# Save --------------------------------------------------------------------
-

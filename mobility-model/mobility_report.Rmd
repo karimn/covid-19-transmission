@@ -1,0 +1,113 @@
+---
+output: pdf_document
+header-includes:
+  - \usepackage{pxfonts} 
+params:
+  results_file: lite_merged_epi3deaths.rds
+  country_code: IT
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+root_path <- "."
+
+if (!interactive()) {
+  source(file.path("renv", "activate.R"))
+}
+
+library(magrittr)
+library(tidyverse)
+library(cowplot)
+library(ggridges)
+library(haven)
+library(latex2exp)
+library(rstan)
+
+ggplot2::theme_set(theme_minimal())
+
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+if (interactive()) {
+  source(file.path("mobility-model", "mob_util.R"))
+} else {
+  source(file.path("mobility-model", "mob_util.R"))
+  # source("mob_util.R")
+}
+```
+
+
+```{r}
+results <- read_rds(file.path("data", "mobility", "results", params$results_file)) %>% 
+  filter(fct_match(country_code, params$country_code))
+
+country_name <- results$country_name %>% unique()
+```
+
+
+---
+title: `r country_name`
+---
+
+## Data
+
+```{r, fig.width=15}
+results %>% 
+  plot_day_data(par = "new_deaths", use_date = TRUE, use_free_y_scale = TRUE, use_bar = TRUE)  +
+  labs(title = "New Deaths") 
+```
+
+```{r mob-plot, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  labs(title = "Mobility Data") +
+  NULL
+```
+
+## Analysis
+
+Number of divergent transitions = `r first(results$divergent_trans)`
+
+Maximum $\hat{R}$ = `r first(results$max_rhat)`
+
+Minimum Bulk ESS = `r first(results$min_ess_bulk)`
+
+Minimum Tail ESS = `r first(results$min_ess_tail)`
+
+```{r R0-plot, fig.width=10}
+results %>% 
+  plot_subnat_ci(par = "R0") + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r Rt-plot, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m} . S_{t,m}")) 
+```
+```{r adj-factor-plot, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_ci(par = "adj_factor", use_date = TRUE) +
+  labs(title = TeX("S_{t,m}")) 
+```
+
+```{r last-Rt-plot, fig.height=4, fig.width=10}
+results %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r post-deaths, fig.width=14}
+results %>% 
+  plot_post_deaths()
+```
+
+```{r, fig.width=10}
+results %>% 
+  plot_subnat_ci(par = "imputed_cases") + 
+  labs(title = TeX("Imputed Cases"))
+```
+

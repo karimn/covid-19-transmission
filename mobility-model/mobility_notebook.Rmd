@@ -21,7 +21,12 @@ ggplot2::theme_set(theme_minimal())
 
 ```{r}
 # ita_prior_results <- read_rds(file.path("data", "mobility", "results", "ita_mob_prior_results.rds"))
-prior_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_prior_results.rds"))
+# prior_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_prior_results.rds"))
+prior_results <- read_rds(file.path("data", "mobility", "results", "test_hyperparam_concentrated_prior_results.rds"))
+
+load(file.path("data", "mobility", "results", "test_hyperparam_concentrated_prior.RData"))
+
+prior_toplevel_results <- extract_toplevel_results(mob_fit, "toplevel_log_R0")
 ```
 
 ```{r}
@@ -44,6 +49,9 @@ prior_results %>%
   select(sub_region, param_results) %>% 
   unnest(param_results) %>% {
     plot_grid(
+      # prior_toplevel_results %>% 
+        
+      
       filter(., fct_match(parameter, "R0")) %>% 
         select(sub_region, iter_data) %>% 
         unnest(iter_data) %>% 
@@ -53,14 +61,27 @@ prior_results %>%
         labs(title = TeX("Prior predicted $R_0$"), x = "") +
         NULL,
       
+      filter(., fct_match(parameter, "national_effect_R0")) %>% 
+        select(sub_region, iter_data) %>% 
+        unnest(iter_data) %>% 
+        ggplot(aes(iter_value)) +
+        # ggplot(aes(iter_value * 3.28)) +
+        geom_density() +
+        # geom_vline(xintercept = 3.28, linetype = "dotted") +
+        # ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
+        scale_x_continuous("", breaks = seq(0, 2, 0.25)) +
+        labs(title = TeX("Prior predicted national effect on $R_0$")) +
+        NULL,
+      
       filter(., fct_match(parameter, "subnational_effect_R0")) %>% 
         select(sub_region, iter_data) %>% 
         unnest(iter_data) %>% 
-        ggplot(aes(iter_value * 3.28)) +
+        ggplot(aes(iter_value)) +
+        # ggplot(aes(iter_value * 3.28)) +
         geom_density() +
-        geom_vline(xintercept = 3.28, linetype = "dotted") +
-        ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
-        scale_x_continuous("", breaks = seq(1, 5, 1)) +
+        # geom_vline(xintercept = 3.28, linetype = "dotted") +
+        # ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
+        scale_x_continuous("", breaks = seq(0, 2, 0.05)) +
         labs(title = TeX("Prior predicted subnational effect on $R_0$")) +
         NULL,
       
@@ -95,6 +116,11 @@ prior_results %>%
 ```
 
 # Analysis
+
+```{r}
+merged_results <- read_rds(file.path("data", "mobility", "results", "clean", "merged.rds"))
+```
+
 
 ## Italy
 
@@ -156,6 +182,7 @@ ita_results %>%
     strip.text.x = element_blank(),
     strip.text.y = element_text(size = 7))
 ```
+
 ```{r, fig.width=14}
 ita_results %>% 
   select(sub_region, daily_data) %>% 
@@ -310,7 +337,7 @@ usa_results %>%
   NULL
 ```
 
-# Italy and USA
+## Italy and USA
 
 ```{r}
 ita_usa_results <- read_rds(file.path("data", "mobility", "results", "ita_usa_mob_results.rds"))
@@ -324,7 +351,7 @@ ita_usa_results %>%
   labs(title = TeX("R_{0,m}"))
 ```
 
-# Argentina, Australia, Canada, Portugal 
+## Argentina, Australia, Canada, Portugal 
 
 ```{r}
 incr_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_results.rds"))
@@ -357,24 +384,47 @@ incr_results %>%
   # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
   plot_grid(plotlist = ., ncol = 1)
 ```
+
 ```{r, fig.width=14}
 incr_results %>% 
   plot_post_deaths()
 ```
 
-# Argentina, Australia, Canada, Portugal, Poland
+## Argentina, Australia, Canada, Portugal, Poland
 
 ```{r}
-incr_pl_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_pl_mob_avg_results.rds"))
+# incr_pl_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_pl_mob_avg_results.rds"))
+incr_pl_results <- read_rds(file.path("data", "mobility", "results", "test_hyperparam_concentrated4_results.rds"))
 ```
 
-```{r incr2-mob-plot, fig.height=6, fig.width=12}
+```{r incr2-mob-plot, fig.height=8, fig.width=12}
 incr_pl_results %>% 
   plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
   NULL
 ```
 
-# Poland
+```{r incr-pl-R0-plot, fig.width=10, fig.height=8}
+incr_pl_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r incr-pl-Rt-plot, fig.height=8, fig.width=10}
+incr_pl_results %>% 
+  group_by(country_code, country_name) %>% 
+  do(plot_obj = plot_day_ci(., "Rt_adj")) %>% 
+  ungroup() %>% 
+  mutate(plot_obj = map2(plot_obj, country_name, 
+                         ~ .x + 
+                           geom_hline(yintercept = 1, linetype = "dotted") +
+                           labs(subtitle = .y))) %>% 
+  pull(plot_obj) %>%
+  # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
+  plot_grid(plotlist = ., ncol = 1)
+```
+
+## Poland
 
 ```{r}
 pl_results <- read_rds(file.path("data", "mobility", "results", "pl_mob_results.rds"))
@@ -401,7 +451,86 @@ pl_results %>%
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
+
 ```{r, fig.width=14}
 pl_results %>% 
+  plot_post_deaths()
+```
+
+## Brazil
+
+```{r br-R0-plot, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r br-mob-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r br-Rt-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r br-last-Rt-plot, fig.height=4, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r br-post-deaths, fig.width=14}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_post_deaths()
+```
+
+## India 
+
+```{r in-R0-plot, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r in-mob-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r in-Rt-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r in-last-Rt-plot, fig.height=4, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r in-post-deaths, fig.width=14}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
   plot_post_deaths()
 ```

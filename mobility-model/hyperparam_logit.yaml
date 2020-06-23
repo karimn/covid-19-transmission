@@ -1,0 +1,7 @@
+hyperparam_tau_beta_toplevel: 0.5
+hyperparam_tau_beta_national_sd: 0.25
+hyperparam_tau_beta_subnational_sd: 0.125
+
+hyperparam_toplevel_R0_sd: 0.25
+hyperparam_tau_national_effect_log_R0_sd: 0.05
+hyperparam_tau_subnational_effect_log_R0_sd: 0.025
