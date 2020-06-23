@@ -76,7 +76,7 @@ Minimum Tail ESS = `r first(results$min_ess_tail)`
 
 ```{r R0-plot, fig.width=10}
 results %>% 
-  plot_subnat_ci() + 
+  plot_subnat_ci(par = "R0") + 
   coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))
 ```
@@ -104,3 +104,10 @@ results %>%
 results %>% 
   plot_post_deaths()
 ```
+
+```{r, fig.width=10}
+results %>% 
+  plot_subnat_ci(par = "imputed_cases") + 
+  labs(title = TeX("Imputed Cases"))
+```
+

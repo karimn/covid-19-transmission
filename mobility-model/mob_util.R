@@ -164,10 +164,10 @@ extract_beta <- function(fit) {
 
 }
 
-plot_subnat_ci <- function(results) {
+plot_subnat_ci <- function(results, par) {
   results %>%
     unnest(param_results) %>%
-    filter(fct_match(parameter, "R0")) %>%
+    filter(fct_match(parameter, par)) %>%
     mutate(sub_region = fct_reorder(sub_region, per_0.5)) %>%
     ggplot(aes(y = sub_region)) +
     geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9), fatten = 1.5) +
