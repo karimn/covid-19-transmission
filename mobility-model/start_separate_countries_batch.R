@@ -46,7 +46,7 @@ job_country_dict <- subnat_data %>%
 job_id <- NULL
 
 if (!script_options$`no-sbatch`) {
-  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
+  batchcmd <- str_glue("sbatch  --parsable --array={countries} separate_countries_slurm.sh")
 
   cat("Running:", batchcmd, "\n")
 
