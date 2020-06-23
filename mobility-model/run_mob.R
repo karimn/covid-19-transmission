@@ -33,11 +33,11 @@ script_options <- if (interactive()) {
   root_path <- "."
 
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
-  # docopt::docopt(opt_desc, 'fit it -i 1000 --merge-days=2')
+  docopt::docopt(opt_desc, 'fit nl -i 2000 --no-partial-pooling=mob')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
-  docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
+  # docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
 } else {
   root_path <- ".."
 
@@ -366,7 +366,7 @@ make_initializer <- function(stan_data) {
 
   function(chain_id) {
     lst(
-      beta_toplevel = as.array(rnorm(stan_data$num_coef, 0, 0.1)),
+      beta_toplevel = if (stan_data$hierarchical_mobility_model) as.array(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = 0),
       beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) as.array(abs(rnorm(stan_data$num_coef, 0, 0.1))) else array(dim = c(0)),
 
       beta_national_raw = if (is_multinational && stan_data$hierarchical_mobility_model)
