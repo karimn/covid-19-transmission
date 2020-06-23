@@ -46,7 +46,7 @@ job_country_dict <- subnat_data %>%
 job_id <- NULL
 
 if (!script_options$`no-sbatch`) {
-  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
+  batchcmd <- str_glue("sbatch --array={countries} --parsable separate_countries_slurm.sh")
 
   cat("Running:", batchcmd, "\n")
 
@@ -58,5 +58,5 @@ if (!script_options$`no-sbatch`) {
     mutate(job_id)
 }
 
-write_rds(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".rds"))
+write_tsv(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".tsv"))
 
