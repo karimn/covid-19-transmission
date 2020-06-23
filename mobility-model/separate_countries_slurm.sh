@@ -10,7 +10,9 @@
 
 module load gcc/9.2.0-fasrc01 R_core/3.6.3-fasrc01
 
-RUN_SUFFIX=epi3deaths_mob
+# RUN_SUFFIX=epi3deaths_mob
+RUN_SUFFIX=mob
 
-Rscript run_mob.R fit ${SLURM_ARRAY_TASK_ID} -i 2000 -o "{all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${RUN_SUFFIX}" --hyperparam=separate_hyperparam.yaml --show-script-options --epidemic-cutoff=3
+Rscript run_mob.R fit ${SLURM_ARRAY_TASK_ID} -i 2000 -o "{all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${RUN_SUFFIX}" --hyperparam=separate_hyperparam.yaml --show-script-options
+#--epidemic-cutoff=3
 
