@@ -49,6 +49,23 @@ country_name <- results$country_name %>% unique()
 title: `r country_name`
 ---
 
+## Data
+
+```{r, fig.width=15}
+results %>% 
+  plot_day_data(par = "new_deaths", use_date = TRUE, use_free_y_scale = TRUE, use_bar = TRUE)  +
+  labs(title = "New Deaths") 
+```
+
+```{r mob-plot, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  labs(title = "Mobility Data") +
+  NULL
+```
+
+## Analysis
+
 Number of divergent transitions = `r first(results$divergent_trans)`
 
 Maximum $\hat{R}$ = `r first(results$max_rhat)`
@@ -62,13 +79,6 @@ results %>%
   plot_subnat_ci() + 
   coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))
-```
-
-```{r mob-plot, fig.height=6, fig.width=12}
-results %>% 
-  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
-  labs(title = "Mobility Data") +
-  NULL
 ```
 
 ```{r Rt-plot, fig.height=6, fig.width=12}

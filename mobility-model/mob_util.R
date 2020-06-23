@@ -176,23 +176,30 @@ plot_subnat_ci <- function(results) {
     facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
 }
 
-plot_day_data <- function(results, par, use_date = FALSE) {
+plot_day_data <- function(results, par, use_date = FALSE, use_bar = FALSE, use_free_y_scale = FALSE) {
   time_aes <- if (use_date) aes(x = date) else aes(x = day_index)
   y_aes <- if (length(par) > 1) aes(y = value, color = name) else aes(y = value)
 
-  results %>%
+  plot_obj <- results %>%
     select(country_code, sub_region, daily_data, first_infection_seeding_day, epidemic_start_date) %>%
     unnest(daily_data) %>%
     select(sub_region, day_index, date, all_of(par), first_infection_seeding_day, epidemic_start_date) %>%
     pivot_longer(all_of(par)) %>%
     ggplot(time_aes) +
     geom_vline(aes(xintercept = first_infection_seeding_day), linetype = "dotted", data = . %>% distinct(sub_region, first_infection_seeding_day)) +
-    geom_vline(aes(xintercept = epidemic_start_date), linetype = "dotted", data = . %>% distinct(sub_region, epidemic_start_date)) +
-    geom_line(y_aes) +
+    geom_vline(aes(xintercept = epidemic_start_date), linetype = "dotted", data = . %>% distinct(sub_region, epidemic_start_date))
+
+  plot_obj <- if (use_bar) {
+    plot_obj + geom_col(y_aes, color = "black", alpha = 0.5, size = 0.25)
+  } else {
+    plot_obj + geom_line(y_aes)
+  }
+
+  plot_obj +
     scale_color_discrete("") +
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
+    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left", scales = if (use_free_y_scale) "free_y" else "fixed") +
     theme(
       strip.placement = "outside",
       strip.text = element_text(angle = 0),
