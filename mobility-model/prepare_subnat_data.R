@@ -4,7 +4,6 @@
   prepare_subnat_data <raw-data-file> <output-data-file>
 " -> opt_desc
 
-
 script_options <- if (interactive()) {
   root_path <- "."
 
@@ -23,7 +22,7 @@ library(magrittr)
 library(tidyverse)
 
 source(file.path(root_path, "mobility-model", "constants.R"))
-source(file.path(root_path, "util.R"))
+source(file.path(root_path, "mobility-model", "mob_util.R"))
 
 # Cleanup -----------------------------------------------------------------
 
