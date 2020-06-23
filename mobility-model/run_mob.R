@@ -83,6 +83,7 @@ if (!is_null(script_options$`no-partial-pooling`)) {
 }
 
 source(file.path(root_path, "util.R"))
+source(file.path(root_path, "mobility-model", "mob_util.R"))
 
 # Population Data For IFR -------------------------------------------------
 
