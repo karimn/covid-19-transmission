@@ -22,12 +22,20 @@ library(haven)
 library(latex2exp)
 library(rstan)
 
-source("util.R")
-
 ggplot2::theme_set(theme_minimal())
 
 knitr::opts_chunk$set(echo = FALSE)
 ```
+
+```{r}
+if (interactive()) {
+  source(file.path("mobility-model", "mob_util.R"))
+} else {
+  source(file.path("mobility-model", "mob_util.R"))
+  # source("mob_util.R")
+}
+```
+
 
 ```{r}
 results <- read_rds(file.path("data", "mobility", "results", params$results_file)) %>% 
@@ -67,7 +75,7 @@ results %>%
 results %>% 
   plot_day_ci(par = "Rt_adj", use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
-  labs(title = TeX("R_{t,m}")) 
+  labs(title = TeX("R_{t,m} . S_{t,m}")) 
 ```
 ```{r adj-factor-plot, fig.height=6, fig.width=12}
 results %>% 

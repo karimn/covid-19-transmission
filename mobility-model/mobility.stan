@@ -245,6 +245,8 @@ transformed parameters {
               Rt_adj[curr_day_pos] = adj_factor[curr_day_pos] * Rt[curr_day_pos];
 
               new_cases[curr_day_pos] = Rt_adj[curr_day_pos] * new_cases[days_pos:(curr_day_pos - 1)] * tail(rev_gen_factor, day_index - 1);
+            } else {
+              Rt_adj[curr_day_pos] = Rt[curr_day_pos];
             }
           } else {
             Rt_adj[curr_day_pos] = Rt[curr_day_pos];
