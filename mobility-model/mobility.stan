@@ -25,6 +25,7 @@ data {
   int<lower = 0, upper = 1> use_fixed_tau_beta; // Use the same SD for all mobility effects -- homogenous partial pooling.
   int<lower = 0, upper = 1> generate_post_prediction;
   int<lower = 0, upper = 1> use_transformed_param_constraints;
+  int<lower = 0, upper = 1> center_design_matrix;
 
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
@@ -128,8 +129,14 @@ transformed data {
         toplevel_centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
       }
 
-      qr_Q_mat_toplevel = qr_thin_Q(toplevel_centered_design_matrix) * sqrt(D - 1);
-      qr_R_mat_toplevel = qr_thin_R(toplevel_centered_design_matrix) / sqrt(D - 1);
+      if (center_design_matrix) {
+        qr_Q_mat_toplevel = qr_thin_Q(toplevel_centered_design_matrix) * sqrt(D - 1);
+        qr_R_mat_toplevel = qr_thin_R(toplevel_centered_design_matrix) / sqrt(D - 1);
+      } else {
+        qr_Q_mat_toplevel = qr_thin_Q(design_matrix) * sqrt(D - 1);
+        qr_R_mat_toplevel = qr_thin_R(design_matrix) / sqrt(D - 1);
+      }
+
       qr_inv_R_mat_toplevel = inverse(qr_R_mat_toplevel);
     }
 
@@ -148,8 +155,15 @@ transformed data {
             design_matrix[national_days_pos:national_days_end, coef_index] - mean(design_matrix[national_days_pos:national_days_end, coef_index]);
         }
 
-        qr_Q_mat_national[national_days_pos:national_days_end] = qr_thin_Q(national_centered_design_matrix) * sqrt(curr_days_observed_national - 1);
-        qr_R_mat_national = qr_thin_R(national_centered_design_matrix) / sqrt(curr_days_observed_national - 1);
+
+        if (center_design_matrix) {
+          qr_Q_mat_national[national_days_pos:national_days_end] = qr_thin_Q(national_centered_design_matrix) * sqrt(curr_days_observed_national - 1);
+          qr_R_mat_national = qr_thin_R(national_centered_design_matrix) / sqrt(curr_days_observed_national - 1);
+        } else {
+          qr_Q_mat_national[national_days_pos:national_days_end] = qr_thin_Q(design_matrix[national_days_pos:national_days_end]) * sqrt(curr_days_observed_national - 1);
+          qr_R_mat_national = qr_thin_R(design_matrix[national_days_pos:national_days_end ]) / sqrt(curr_days_observed_national - 1);
+        }
+
         qr_inv_R_mat_national[country_index] = inverse(qr_R_mat_national);
 
         national_days_pos = national_days_end + 1;
@@ -181,8 +195,14 @@ transformed data {
             subnational_centered_design_matrix[, coef_index] = design_matrix[days_pos:days_end, coef_index] - mean(design_matrix[days_pos:days_end, coef_index]);
           }
 
-          qr_Q_mat_subnational[days_pos:days_end] = qr_thin_Q(subnational_centered_design_matrix) * sqrt(curr_days_observed - 1);
-          qr_R_mat_subnational = qr_thin_R(subnational_centered_design_matrix) / sqrt(curr_days_observed - 1);
+          if (center_design_matrix) {
+            qr_Q_mat_subnational[days_pos:days_end] = qr_thin_Q(subnational_centered_design_matrix) * sqrt(curr_days_observed - 1);
+            qr_R_mat_subnational = qr_thin_R(subnational_centered_design_matrix) / sqrt(curr_days_observed - 1);
+          } else {
+            qr_Q_mat_subnational[days_pos:days_end] = qr_thin_Q(design_matrix[days_pos:days_end]) * sqrt(curr_days_observed - 1);
+            qr_R_mat_subnational = qr_thin_R(design_matrix[days_pos:days_end]) / sqrt(curr_days_observed - 1);
+          }
+
           qr_inv_R_mat_subnational[curr_subnat_pos] = inverse(qr_R_mat_subnational);
         }
 

@@ -18,6 +18,7 @@ Options:
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
+  --center-design-matrix  Center design matrix.
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
@@ -34,7 +35,7 @@ script_options <- if (interactive()) {
 
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit nl -i 2000 --no-partial-pooling=mob')
-  docopt::docopt(opt_desc, 'fit nl -i 2000')
+  docopt::docopt(opt_desc, 'fit nl -i 2000 --mobility-model=~0+g_residential+g_transit_stations+g_grocery_and_pharmacy+g_parks+g_retail_and_recreation+g_workplaces')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -297,6 +298,7 @@ stan_data <- lst(
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
   generate_post_prediction = !script_options$`no-post-predict`,
   use_transformed_param_constraints = 0,
+  center_design_matrix = script_options$`center-design-matrix`,
 
   # Hyperparameters
 
