@@ -24,7 +24,7 @@ script_options <- if (interactive()) {
 library(magrittr)
 library(tidyverse)
 
-source(file.path(root_path, "util.R"))
+source(file.path(root_path, "mobility-model", "mob_util.R"))
 
 diagnostics_data <- read_tsv(script_options$diagnostics,
                              col_names = c("job_id", "country_index", "divergent_trans", "max_rhat", "min_ess_bulk", "min_ess_tail"),
