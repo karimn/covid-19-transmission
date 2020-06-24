@@ -84,9 +84,12 @@ transformed data {
   vector<lower = 0>[max_days_observed] rev_time_to_death;
   vector<lower = 0>[max_days_observed] rev_gen_factor;
 
-  matrix[D, num_coef] centered_design_matrix; // E.g., mobility
-  matrix[D, num_coef] qr_Q_mat;
-  matrix[num_coef * (hierarchical_mobility_model ? N : 1), num_coef] qr_inv_R_mat;
+  matrix[D_total, num_coef] qr_Q_mat_toplevel;
+  matrix[D_total, num_coef] qr_Q_mat_national;
+  matrix[D_total, num_coef] qr_Q_mat_subnational;
+  matrix[num_coef, num_coef] qr_inv_R_mat_toplevel;
+  matrix[num_coef, num_coef] qr_inv_R_mat_national[N_national];
+  matrix[num_coef, num_coef] qr_inv_R_mat_subnational[N];
 
   {
     real gen_factor_alpha = 1 / (0.62^2);              // alpha = 1 / tau^2;
@@ -115,22 +118,42 @@ transformed data {
     int lkh_pos = 1;
     int subnat_pos = 1;
     int days_pos = 1;
-    int qr_coef_pos = 1;
+    int national_days_pos = 1;
 
-    matrix[num_coef * (hierarchical_mobility_model ? N : 1), num_coef] qr_R_mat;
+    {
+      matrix[num_coef, num_coef] qr_R_mat_toplevel;
+      matrix[D_total, num_coef] toplevel_centered_design_matrix;
 
-    if (!hierarchical_mobility_model) {
       for (coef_index in 1:num_coef) {
-        centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
+        toplevel_centered_design_matrix[, coef_index] = design_matrix[, coef_index] - mean(design_matrix[, coef_index]);
       }
 
-      qr_Q_mat = qr_thin_Q(centered_design_matrix) * sqrt(D - 1);
-      qr_R_mat = qr_thin_R(centered_design_matrix) / sqrt(D - 1);
-      qr_inv_R_mat = inverse(qr_R_mat);
+      qr_Q_mat_toplevel = qr_thin_Q(toplevel_centered_design_matrix) * sqrt(D - 1);
+      qr_R_mat_toplevel = qr_thin_R(toplevel_centered_design_matrix) / sqrt(D - 1);
+      qr_inv_R_mat_toplevel = inverse(qr_R_mat_toplevel);
     }
 
     for (country_index in 1:N_national) {
       int subnat_end = subnat_pos + N_subnational[country_index] - 1;
+
+      {
+        int curr_days_observed_national = sum(days_observed[subnat_pos:subnat_end]) + days_to_forecast * N_subnational[country_index];
+        int national_days_end = national_days_pos + curr_days_observed_national - 1;
+
+        matrix[num_coef, num_coef] qr_R_mat_national;
+        matrix[curr_days_observed_national, num_coef] national_centered_design_matrix;
+
+        for (coef_index in 1:num_coef) {
+          national_centered_design_matrix[, coef_index] =
+            design_matrix[national_days_pos:national_days_end, coef_index] - mean(design_matrix[national_days_pos:national_days_end, coef_index]);
+        }
+
+        qr_Q_mat_national[national_days_pos:national_days_end] = qr_thin_Q(national_centered_design_matrix) * sqrt(curr_days_observed_national - 1);
+        qr_R_mat_national = qr_thin_R(national_centered_design_matrix) / sqrt(curr_days_observed_national - 1);
+        qr_inv_R_mat_national[country_index] = inverse(qr_R_mat_national);
+
+        national_days_pos = national_days_end + 1;
+      }
 
       if (N_subnational[country_index] == 1) {
         num_singleton_countries += 1;
@@ -138,9 +161,8 @@ transformed data {
 
       for (subnat_index in 1:N_subnational[country_index]) {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int curr_days_observed = days_observed[curr_subnat_pos];
-        int days_end = days_pos + curr_days_observed + days_to_forecast - 1;
-        int qr_coef_end = qr_coef_pos + num_coef - 1;
+        int curr_days_observed = days_observed[curr_subnat_pos] + days_to_forecast;
+        int days_end = days_pos + curr_days_observed - 1;
 
         for (lkh_day_index in 1:num_likelihood_days[subnat_index]) {
           likelihood_day_idx[lkh_pos] = start_epidemic_offset + lkh_day_index - 1;
@@ -148,29 +170,27 @@ transformed data {
           lkh_pos += 1;
         }
 
-        if (hierarchical_mobility_model) {
+        {
+          matrix[num_coef, num_coef] qr_R_mat_subnational;
+          matrix[curr_days_observed, num_coef] subnational_centered_design_matrix;
+
           // QR decomposition should be done at each subnational level
           // https://discourse.mc-stan.org/t/qr-reparametrization-in-multilevel-models/6929
 
           for (coef_index in 1:num_coef) {
-            centered_design_matrix[days_pos:days_end, coef_index] = design_matrix[days_pos:days_end, coef_index] - mean(design_matrix[days_pos:days_end, coef_index]);
+            subnational_centered_design_matrix[, coef_index] = design_matrix[days_pos:days_end, coef_index] - mean(design_matrix[days_pos:days_end, coef_index]);
           }
 
-          qr_Q_mat[days_pos:days_end] = qr_thin_Q(centered_design_matrix[days_pos:days_end]) * sqrt(curr_days_observed - 1);
-          qr_R_mat[qr_coef_pos:qr_coef_end] = qr_thin_R(centered_design_matrix[days_pos:days_end]) / sqrt(curr_days_observed - 1);
-          qr_inv_R_mat[qr_coef_pos:qr_coef_end] = inverse(qr_R_mat[qr_coef_pos:qr_coef_end]);
+          qr_Q_mat_subnational[days_pos:days_end] = qr_thin_Q(subnational_centered_design_matrix) * sqrt(curr_days_observed - 1);
+          qr_R_mat_subnational = qr_thin_R(subnational_centered_design_matrix) / sqrt(curr_days_observed - 1);
+          qr_inv_R_mat_subnational[curr_subnat_pos] = inverse(qr_R_mat_subnational);
         }
 
         days_pos = days_end + 1;
-        qr_coef_pos = qr_coef_end + 1;
       }
 
       subnat_pos = subnat_end + 1;
     }
-  }
-
-  if (num_singleton_countries > 0) {
-    reject("Singleton countries not supported with QR decomposition.");
   }
 }
 
@@ -181,16 +201,13 @@ parameters {
   real<lower = 0> tau_impute_cases;
   vector<lower = 0>[N] imputed_cases;
 
-  matrix[num_coef, hierarchical_mobility_model ? N : 1] beta_qr;
-
   // Linear model parameters
-  vector[hierarchical_mobility_model ? num_coef : 0] beta_toplevel;
+  vector[hierarchical_mobility_model ? num_coef : 0] beta_qr_toplevel;
 
   vector<lower = 0>[is_multinational && hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0] beta_national_sd; // Separate SD for each parameters. Vollmer et al. use same for all parameters
-  matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw; // Uncentered for now to avoid divergence
-
   matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national - num_singleton_countries] beta_subnational_sd;
-  // matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
+  matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_qr_national; // Uncentered for now to avoid divergence
+  matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_qr_subnational;
 
   vector<lower = 0>[N] ifr_noise;
 
@@ -206,7 +223,8 @@ parameters {
 
 transformed parameters {
   // Linear model parameters
-  vector[hierarchical_mobility_model ? 0 : num_coef] beta_toplevel_from_qr; // Only used if not a hierarchical model
+  vector[num_coef] beta_toplevel = qr_inv_R_mat_toplevel * beta_qr_toplevel;
+  matrix[num_coef, is_multinational && hierarchical_mobility_model ? N_national : 0] beta_national_raw;
   matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
 
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
@@ -221,8 +239,6 @@ transformed parameters {
 
   vector[D_total] adj_factor = rep_vector(1, D_total);
 
-  // matrix[num_coef, N] beta = rep_matrix(beta_toplevel, N);
-
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
   vector[N] ifr = mean_ifr .* ifr_noise;
@@ -232,31 +248,29 @@ transformed parameters {
     subnational_effect_log_R0 = rep_vector(0, N - num_singleton_countries);
   }
 
-  if (!hierarchical_mobility_model) {
-    beta_toplevel_from_qr = qr_inv_R_mat * beta_qr[, 1];
-  }
-
   {
     int full_subnat_pos = 1; // The "full" pointers do not exclude subnational entities in singleton countries (have only one subnational entity)
     int subnat_pos = 1;
     int days_pos = 1;
-    int qr_coef_pos = 1;
+    int national_days_pos = 1;
+
+    vector[D_total] mobility_predictor = qr_Q_mat_toplevel * beta_qr_toplevel;
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
       int full_subnat_end = full_subnat_pos + num_subnat - 1;
       int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
-
-      vector[num_coef] beta_national = rep_vector(0, num_coef);
+      int curr_days_observed_national = sum(days_observed[full_subnat_pos:full_subnat_end]) + days_to_forecast * N_subnational[country_index];
+      int national_days_end = national_days_pos + curr_days_observed_national - 1;
 
       if (is_multinational) {
         if (hierarchical_mobility_model) {
+          mobility_predictor[national_days_pos:national_days_end] += qr_Q_mat_national[national_days_pos:national_days_end] * beta_qr_national[, country_index];
+
           if (use_fixed_tau_beta) {
-            // beta[, full_subnat_pos:full_subnat_end] += rep_matrix(beta_national_raw[, country_index] * beta_national_sd[1], num_subnat);
-            beta_national = beta_national_raw[, country_index] * beta_national_sd[1];
+            beta_national_raw[, country_index] = (qr_inv_R_mat_national[country_index] * beta_qr_national[, country_index]) / beta_national_sd[1];
           } else {
-            // beta[, full_subnat_pos:full_subnat_end] += rep_matrix(beta_national_raw[, country_index] .* beta_national_sd, num_subnat);
-            beta_national += beta_national_raw[, country_index] .* beta_national_sd;
+            beta_national_raw[, country_index] = (qr_inv_R_mat_national[country_index] * beta_qr_national[, country_index]) ./ beta_national_sd;
           }
         }
 
@@ -275,43 +289,29 @@ transformed parameters {
         int curr_full_subnat_pos = full_subnat_pos + subnat_index - 1;
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_full_subnat_pos] + days_to_forecast - 1;
-        int qr_coef_end = qr_coef_pos + num_coef - 1;
 
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
         if (hierarchical_mobility_model && num_subnat > 1) {
+          mobility_predictor[days_pos:days_end] += qr_Q_mat_subnational[days_pos:days_end] * beta_qr_subnational[, curr_subnat_pos];
+
           if (use_fixed_tau_beta) {
-            // beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] * beta_subnational_sd[1, country_index];
-            beta_subnational_raw[, curr_subnat_pos] = (qr_inv_R_mat[qr_coef_pos:qr_coef_end] * beta_qr[, curr_full_subnat_pos] - beta_toplevel - beta_national) / beta_subnational_sd[1, country_index];
+            beta_subnational_raw[, curr_subnat_pos] = (qr_inv_R_mat_subnational[curr_full_subnat_pos] * beta_qr_subnational[, curr_subnat_pos]) / beta_subnational_sd[1, country_index];
           } else {
-            // beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
-            beta_subnational_raw[, curr_subnat_pos] = (qr_inv_R_mat[qr_coef_pos:qr_coef_end] * beta_qr[, curr_full_subnat_pos] - beta_toplevel - beta_national) ./ beta_subnational_sd[, country_index];
+            beta_subnational_raw[, curr_subnat_pos] = (qr_inv_R_mat_subnational[curr_full_subnat_pos] * beta_qr_subnational[, curr_subnat_pos]) ./ beta_subnational_sd[, country_index];
           }
         }
 
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[curr_full_subnat_pos] * time_resolution, days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
-          // mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
-
-          if (hierarchical_mobility_model) {
-            mobility_effect[days_pos:days_end] = 2 * inv_logit(qr_Q_mat[days_pos:days_end] * beta_qr[, curr_full_subnat_pos]);
-          } else {
-            mobility_effect[days_pos:days_end] = 2 * inv_logit(qr_Q_mat[days_pos:days_end] * beta_qr[, 1]);
-          }
+          mobility_effect[days_pos:days_end] = 2 * inv_logit(mobility_predictor[days_pos:days_end]);
 
           Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos]) * mobility_effect[days_pos:days_end];
         } else {
-          // mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]);
-          if (hierarchical_mobility_model) {
-            mobility_effect[days_pos:days_end] = exp(qr_Q_mat[days_pos:days_end] * beta_qr[, curr_full_subnat_pos]);
+          mobility_effect[days_pos:days_end] = exp(mobility_predictor[days_pos:days_end]);
 
-            Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + qr_Q_mat[days_pos:days_end] * beta_qr[, curr_full_subnat_pos]);
-          } else {
-            mobility_effect[days_pos:days_end] = exp(qr_Q_mat[days_pos:days_end] * beta_qr[, 1]);
-
-            Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + qr_Q_mat[days_pos:days_end] * beta_qr[, 1]);
-          }
+          Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + mobility_predictor[days_pos:days_end]);
         }
 
         for (day_index in 1:total_days[curr_full_subnat_pos]) {
@@ -341,11 +341,11 @@ transformed parameters {
         }
 
         days_pos = days_end + 1;
-        qr_coef_pos = qr_coef_end + 1;
       }
 
       full_subnat_pos = full_subnat_end + 1;
       subnat_pos = subnat_end + 1;
+      national_days_pos = national_days_end + 1;
     }
   }
 }
