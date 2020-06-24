@@ -58,5 +58,5 @@ if (!script_options$`no-sbatch`) {
     mutate(job_id)
 }
 
-write_rds(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".rds"))
+write_tsv(job_country_dict, str_c(str_c("country_dict", job_id, sep = "_"), ".tsv"))
 
