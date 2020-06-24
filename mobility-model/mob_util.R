@@ -267,6 +267,7 @@ plot_post_deaths <- function(results) {
 }
 
 render_country_reports <- function(results,
+                                   results_file = "lite_merged.rds",
                                    report_template = file.path("mobility-model", "mobility_report.Rmd"),
                                    reports_dir = file.path("mobility-model", "country-reports"),
                                    reports_id = NULL) {
@@ -276,7 +277,7 @@ render_country_reports <- function(results,
     walk(~ rmarkdown::render(report_template,
                              output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", sep = "_"),
                              output_dir = reports_dir,
-                             params = list(country_code = .x),
+                             params = lst(country_code = .x, results_file),
                              knit_root_dir = ".."))
 
 }
