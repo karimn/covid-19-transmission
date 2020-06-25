@@ -1,14 +1,16 @@
 #!/bin/Rscript
 
-stringr::str_glue(
 "Usage:
-  start_separate_countries_batch.R [<countries> | --exclude-us] [--no-sbatch]
-") -> opt_desc
+  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name>]
+
+Options:
+  --outputname=<name, -o <name>  Name to use as suffix for results [default: mob].
+" -> opt_desc
 
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "")
+  docopt::docopt(opt_desc, "fit")
 } else {
   root_path <- ".."
 
@@ -46,7 +48,9 @@ job_country_dict <- subnat_data %>%
 job_id <- NULL
 
 if (!script_options$`no-sbatch`) {
-  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh")
+  run_type <- if (script_options$fit) "fit" else "prior"
+
+  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname}")
 
   cat("Running:", batchcmd, "\n")
 
