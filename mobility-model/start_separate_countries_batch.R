@@ -52,7 +52,7 @@ if (!script_options$`no-sbatch`) {
   run_type <- if (script_options$fit) "fit" else "prior"
   iter <- as.integer(script_options$iter)
 
-  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter}")
+  batchcmd <- str_glue("sbatch --parsable --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter}")
 
   cat("Running:", batchcmd, "\n")
 
