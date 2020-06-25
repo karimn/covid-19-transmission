@@ -1,9 +1,10 @@
 #!/bin/Rscript
 
 "Usage:
-  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name>]
+  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations>]
 
 Options:
+  --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000]
   --outputname=<name, -o <name>  Name to use as suffix for results [default: mob].
 " -> opt_desc
 
@@ -49,8 +50,9 @@ job_id <- NULL
 
 if (!script_options$`no-sbatch`) {
   run_type <- if (script_options$fit) "fit" else "prior"
+  iter <- as.integer(script_options$iter)
 
-  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname}")
+  batchcmd <- str_glue("sbatch --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter}")
 
   cat("Running:", batchcmd, "\n")
 
