@@ -24,7 +24,7 @@ Options:
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
-  --no-post-predict  Don't do posterior prediction
+  --no-predict  No prediction
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --show-script-options
 ") -> opt_desc
@@ -294,7 +294,7 @@ stan_data <- lst(
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
-  generate_post_prediction = !script_options$`no-post-predict`,
+  generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
 
   # Hyperparameters
@@ -490,7 +490,7 @@ tryCatch({
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
 
-  if (!script_options$`no-post-predict` && !script_options$prior) {
+  if (!script_options$`no-predict` && !script_options$prior) {
     day_param %<>% c("deaths_rep")
   }
 

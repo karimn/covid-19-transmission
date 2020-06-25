@@ -23,7 +23,7 @@ data {
   int<lower = 1, upper = 2> mobility_model_type;
   int<lower = 0, upper = 1> use_log_R0;
   int<lower = 0, upper = 1> use_fixed_tau_beta; // Use the same SD for all mobility effects -- homogenous partial pooling.
-  int<lower = 0, upper = 1> generate_post_prediction;
+  int<lower = 0, upper = 1> generate_prediction;
   int<lower = 0, upper = 1> use_transformed_param_constraints;
 
   int<lower = 1> N_national; // Number of countries
@@ -334,10 +334,10 @@ model {
 }
 
 generated quantities {
-  vector<lower = 0>[fit_model && generate_post_prediction ? D : 0] deaths_rep;
-  vector<lower = 0>[fit_model && generate_post_prediction ? D : 0] cum_deaths_rep;
+  vector<lower = 0>[generate_prediction ? D : 0] deaths_rep;
+  vector<lower = 0>[generate_prediction ? D : 0] cum_deaths_rep;
 
-  if (fit_model && generate_post_prediction) {
+  if (generate_prediction) {
     int subnat_pos = 1;
     int days_pos = 1;
 
