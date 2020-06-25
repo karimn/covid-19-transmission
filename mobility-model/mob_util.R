@@ -164,14 +164,21 @@ extract_beta <- function(fit) {
 
 }
 
-plot_subnat_ci <- function(results, par) {
-  results %>%
-    unnest(param_results) %>%
-    filter(fct_match(parameter, par)) %>%
+plot_subnat_ci <- function(results, par, beta = FALSE) {
+  results %>% {
+    if (beta) {
+      unnest(., beta_results) %>%
+        mutate(parameter = str_c("$\\beta_", coef_index, "$"))
+    } else {
+      unnest(., param_results) %>%
+        filter(fct_match(parameter, par))
+    }
+  } %>%
     mutate(sub_region = fct_reorder(sub_region, per_0.5)) %>%
     ggplot(aes(y = sub_region)) +
-    geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9), fatten = 1.5) +
+    geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9, color = parameter), fatten = 1.5, show.legend = beta || length(par) > 1) +
     geom_point(aes(x = mean), size = 1.5, shape = 5) +
+    scale_color_discrete("", labels = if (beta) TeX else waiver()) +
     labs(x = "", y = "") +
     facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
 }
@@ -270,15 +277,19 @@ render_country_reports <- function(results,
                                    results_file = "lite_merged.rds",
                                    report_template = file.path("mobility-model", "mobility_report.Rmd"),
                                    reports_dir = file.path("mobility-model", "country-reports"),
-                                   reports_id = NULL) {
+                                   reports_id = NULL, ...) {
+  extra_param <- rlang::list2(...)
+
   results %>%
     pull(country_code) %>%
     unique() %>%
-    walk(~ rmarkdown::render(report_template,
-                             output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", sep = "_"),
-                             output_dir = reports_dir,
-                             params = lst(country_code = .x, results_file),
-                             knit_root_dir = ".."))
+    walk(~ {
+      rmarkdown::render(report_template,
+                        output_file = str_c(str_to_lower(.x), reports_id, "report.pdf", sep = "_"),
+                        output_dir = reports_dir,
+                        params = lst(country_code = .x, results_file, !!!extra_param),
+                        knit_root_dir = "..")
+    })
 
 }
 
