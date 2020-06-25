@@ -490,7 +490,7 @@ tryCatch({
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
 
-  if (!script_options$`no-predict` && !script_options$prior) {
+  if (!script_options$`no-predict`) {
     day_param %<>% c("deaths_rep")
   }
 
