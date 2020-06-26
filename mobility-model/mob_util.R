@@ -176,8 +176,9 @@ plot_subnat_ci <- function(results, par, beta = FALSE) {
   } %>%
     mutate(sub_region = fct_reorder(sub_region, per_0.5)) %>%
     ggplot(aes(y = sub_region)) +
-    geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9, color = parameter), fatten = 1.5, show.legend = beta || length(par) > 1) +
-    geom_point(aes(x = mean), size = 1.5, shape = 5) +
+    geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9, color = parameter),
+                    fatten = 1.5, position = position_dodge(width = 0.5), show.legend = beta || length(par) > 1) +
+    geom_point(aes(x = mean, color = parameter), size = 1.5, shape = 5, position = position_dodge(width = 0.5), show.legend = beta || length(par) > 1) +
     scale_color_discrete("", labels = if (beta) TeX else waiver()) +
     labs(x = "", y = "") +
     facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
@@ -226,8 +227,9 @@ plot_day_ci <- function(results, par, use_date = FALSE) {
     ggplot(time_aes) +
     geom_vline(aes(xintercept = first_infection_seeding_day), linetype = "dotted", data = . %>% distinct(sub_region, first_infection_seeding_day)) +
     geom_vline(aes(xintercept = epidemic_start_date), linetype = "dotted", data = . %>% distinct(sub_region, epidemic_start_date)) +
-    geom_line(aes(y = per_0.5)) +
-    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.25) +
+    geom_line(aes(y = per_0.5, color = parameter), show.legend = length(par) > 1) +
+    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9, group = parameter), alpha = 0.25) +
+    scale_color_discrete("") +
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
     facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
