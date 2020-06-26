@@ -11,6 +11,7 @@
 module load gcc/9.2.0-fasrc01 R_core/3.6.3-fasrc01
 
 RUN_SUFFIX=$2
+RUN_ARGS="--hyperparam=separate_hyperparam.yaml --show-script-options --mobility-model=~0+g_residential --no-partial-pooling=r0"
 
-Rscript run_mob.R $1 ${SLURM_ARRAY_TASK_ID} -i $3 -o "{all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${RUN_SUFFIX}" --hyperparam=separate_hyperparam.yaml --show-script-options --mobility-model=~0+g_residential
 
+Rscript run_mob.R $1 ${SLURM_ARRAY_TASK_ID} -i $3 -o "{all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${RUN_SUFFIX}" $RUN_ARGS 
