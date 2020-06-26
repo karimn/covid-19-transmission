@@ -2,13 +2,13 @@
 
 stringr::str_glue(
 "Usage:
-  render_country_reports <merged-data-file> <report-dir> [--report-id=<report-id>]
+  render_country_reports (prior | fit) <merged-data-file> <report-dir> [--report-id=<report-id>]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, 'lite_merged.rds mobility-model/country-reports/')
+  docopt::docopt(opt_desc, 'prior lite_merged_prior.rds country-reports/ --report-id=prior')
 } else {
   root_path <- ".."
 
@@ -32,4 +32,5 @@ merged_data %>%
   render_country_reports(file.path(root_path, "mobility-model", "mobility_report.Rmd"),
                          results_file = script_options$`merged-data-file`,
                          script_options$`report-dir`,
-                         script_options$`report-id`)
+                         script_options$`report-id`,
+                         prior = script_options$prior)
