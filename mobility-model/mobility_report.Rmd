@@ -84,6 +84,13 @@ results %>%
   labs(title = TeX("R_{t,m}")) 
 ```
 
+```{r param-trend, fig.height=6, fig.width=12}
+results %>% 
+  plot_day_ci(par = "trend", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("Trend")) 
+```
+
 ```{r mobility-effect-plot, fig.height=6, fig.width=12}
 results %>% 
   plot_day_ci(par = "mobility_effect", use_date = TRUE) +

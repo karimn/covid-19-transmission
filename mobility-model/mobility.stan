@@ -184,10 +184,12 @@ parameters {
   vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0_raw;
   vector<lower = 0>[use_log_R0 && hierarchical_R0_model ? N_national - num_singleton_countries : 0] subnational_effect_log_R0_sd;
 
+  // Parametric Trend
+
   vector<lower = 0, upper = 1>[use_parametric_trend ? N : 0] trend_lambda;
-  real toplevel_trend_kappa;
-  vector<lower = 0>[use_parametric_trend ? N_national : 0] trend_kappa_subnational_sd;
-  vector[use_parametric_trend ? N : 0] trend_kappa_subnational_raw;
+  real<upper = 0> toplevel_trend_kappa;
+  vector[use_parametric_trend ? N_national : 0] trend_log_kappa_effect_subnational_sd;
+  vector[use_parametric_trend ? N : 0] trend_log_kappa_effect_subnational_raw;
 }
 
 transformed parameters {
@@ -210,10 +212,10 @@ transformed parameters {
   vector[N] ifr = mean_ifr .* ifr_noise;
 
   vector[use_parametric_trend ? N : 0] trend_kappa;
-  vector[D_total] log_trend = rep_vector(0, D_total);
+  vector[D_total] trend = rep_vector(1, D_total);
 
   if (use_parametric_trend) {
-    trend_kappa = toplevel_trend_kappa + trend_kappa_subnational_raw .* trend_kappa_subnational_sd[subnat_national_id];
+    trend_kappa = toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
   }
 
   if (use_log_R0 && hierarchical_R0_model) {
@@ -260,7 +262,8 @@ transformed parameters {
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
         if (use_parametric_trend) {
-          log_trend[days_pos:days_end] = log(1 - trend_lambda[curr_full_subnat_pos]) + log_inv_logit(trend_kappa[curr_full_subnat_pos] * trend_day_index[days_pos:days_end]);
+          // log_trend[days_pos:days_end] = log_mix(trend_lambda[curr_full_subnat_pos], 0, log_inv_logit(trend_kappa[curr_full_subnat_pos] * trend_day_index[days_pos:days_end]));
+          trend[days_pos:days_end] = trend_lambda[curr_full_subnat_pos] + (1 - trend_lambda[curr_full_subnat_pos]) * inv_logit(trend_kappa[curr_full_subnat_pos] * trend_day_index[days_pos:days_end]);
         }
 
         if (hierarchical_mobility_model && num_subnat > 1) {
@@ -274,13 +277,13 @@ transformed parameters {
         new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[curr_full_subnat_pos] * time_resolution, days_to_impute_cases);
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
-          mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos] + log_trend[days_pos:days_end]);
+          mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]) .* trend[days_pos:days_end];
 
           Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos]) * mobility_effect[days_pos:days_end];
         } else {
-          mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos] + log_trend[days_pos:days_end]);
+          mobility_effect[days_pos:days_end] = exp(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]) .* trend[days_pos:days_end];
 
-          Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos] + log_trend[days_pos:days_end]);
+          Rt[days_pos:days_end] = exp(log_R0[curr_full_subnat_pos] + design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]) .* trend[days_pos:days_end];
         }
 
         for (day_index in 1:total_days[curr_full_subnat_pos]) {
@@ -358,8 +361,8 @@ model {
 
   if (use_parametric_trend) {
     trend_lambda ~ beta(3, 1);
-    trend_kappa_subnational_sd ~ std_normal();
-    trend_kappa_subnational_raw ~ std_normal();
+    trend_log_kappa_effect_subnational_sd ~ std_normal();
+    trend_log_kappa_effect_subnational_raw ~ std_normal();
   }
 
   if (fit_model) {
@@ -392,8 +395,6 @@ model {
 generated quantities {
   vector<lower = 0>[generate_prediction ? D : 0] deaths_rep;
   vector<lower = 0>[generate_prediction ? D : 0] cum_deaths_rep;
-
-  vector[D_total] trend = exp(log_trend);
 
   if (generate_prediction) {
     int subnat_pos = 1;
