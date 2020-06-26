@@ -4,7 +4,7 @@ header-includes:
   - \usepackage{pxfonts} 
 params:
   results_file: lite_merged_prior.rds
-  country_code: ZA 
+  country_code: MY 
   prior: true 
 ---
 
@@ -29,12 +29,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r}
-if (interactive()) {
-  source(file.path("mobility-model", "mob_util.R"))
-} else {
-  source(file.path("mobility-model", "mob_util.R"))
-  # source("mob_util.R")
-}
+source(file.path("mobility-model", "mob_util.R"))
 ```
 
 
@@ -78,15 +73,15 @@ Minimum Tail ESS = `r first(results$min_ess_tail)`
 ```{r R0-plot, fig.width=10}
 results %>% 
   plot_subnat_ci(par = "R0") + 
-  coord_cartesian(xlim = c(1, 4.5)) +
+  # coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))
 ```
 
 ```{r Rt-plot, fig.height=6, fig.width=12}
 results %>% 
-  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  plot_day_ci(par = c("Rt", "Rt_adj"), use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
-  labs(title = TeX("R_{t,m} . S_{t,m}")) 
+  labs(title = TeX("R_{t,m}")) 
 ```
 
 ```{r mobility-effect-plot, fig.height=6, fig.width=12}
