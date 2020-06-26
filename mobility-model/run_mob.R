@@ -13,6 +13,7 @@ Options:
   -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
+  --output-dir=<dir>  Output directory for all output [default: {file.path(root_path, 'data', 'mobility', 'results')}].
   --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
@@ -243,8 +244,8 @@ all_country_codes <- use_subnat_data %>%
   str_to_lower() %>%
   str_c(collapse = "_")
 
-save_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), ".RData"))
-save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), "_results.rds"))
+save_file <- file.path(script_options$`output-dir`, str_c(str_glue(script_options$output), ".RData"))
+save_results_file <- file.path(script_options$`output-dir`, str_c(str_glue(script_options$output), "_results.rds"))
 
 # Time to Death -----------------------------------------------------------
 
