@@ -14,7 +14,7 @@ Options:
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
   --output-dir=<dir>  Output directory for all output [default: {file.path(root_path, 'data', 'mobility', 'results')}].
-  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
+  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
   --include-param-trend  Include parametric trend.
@@ -36,7 +36,7 @@ script_options <- if (interactive()) {
 
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml')
+  docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --no-partial-pooling=trend')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -78,8 +78,8 @@ time_resolution <- if (is_empty(script_options$`merge-days`)) 1 else script_opti
 if (!is_null(script_options$`no-partial-pooling`)) {
   tryCatch(
     script_options$`no-partial-pooling` %<>%
-      rlang::arg_match(values = c("all", "mob", "r0")) %>%
-      factor(levels = c("all", "mob", "r0")),
+      rlang::arg_match(values = c("all", "mob", "r0", "trend")) %>%
+      factor(levels = c("all", "mob", "r0", "trend")),
 
     error = function(err) stop("Unexpected value for --no-partial-pooling")
   )
@@ -294,6 +294,7 @@ stan_data <- lst(
   fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
   hierarchical_R0_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "r0")),
   hierarchical_mobility_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "mob")),
+  hierarchical_trend = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "trend")),
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
@@ -403,6 +404,12 @@ make_initializer <- function(stan_data) {
       subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
       ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
+
+      trend_lambda = if (stan_data$use_parametric_trend) rbeta(N, 3, 1) else array(dim = 0),
+      toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
+      trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) abs(rnorm(stan_data$N_national, 0, 1)) else array(dim = 0),
+      trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) rnorm(N, 0, 1) else array(dim = 0),
+      trend_kappa = rnorm(N, 0, 0.5),
     )
   }
 }

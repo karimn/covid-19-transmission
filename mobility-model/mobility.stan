@@ -20,6 +20,7 @@ data {
   int<lower = 0, upper = 1> fit_model; // Fit vs prior-predict
   int<lower = 0, upper = 1> hierarchical_R0_model;
   int<lower = 0, upper = 1> hierarchical_mobility_model;
+  int<lower = 0, upper = 1> hierarchical_trend;
   int<lower = 1, upper = 2> mobility_model_type;
   int<lower = 0, upper = 1> use_log_R0;
   int<lower = 0, upper = 1> use_fixed_tau_beta; // Use the same SD for all mobility effects -- homogenous partial pooling.
@@ -188,8 +189,8 @@ parameters {
 
   vector<lower = 0, upper = 1>[use_parametric_trend ? N : 0] trend_lambda;
   real<upper = 0> toplevel_trend_kappa;
-  vector[use_parametric_trend ? N_national : 0] trend_log_kappa_effect_subnational_sd;
-  vector[use_parametric_trend ? N : 0] trend_log_kappa_effect_subnational_raw;
+  vector[use_parametric_trend && hierarchical_trend ? N_national : 0] trend_log_kappa_effect_subnational_sd;
+  vector[use_parametric_trend && hierarchical_trend ? N : 0] trend_log_kappa_effect_subnational_raw;
 }
 
 transformed parameters {
@@ -211,11 +212,15 @@ transformed parameters {
 
   vector[N] ifr = mean_ifr .* ifr_noise;
 
-  vector[use_parametric_trend ? N : 0] trend_kappa;
-  vector[D_total] trend = rep_vector(1, D_total);
+  vector[use_parametric_trend && hierarchical_trend ? N : 0] trend_kappa;
+  vector<lower = 0, upper = 1>[D_total] trend = rep_vector(1, D_total);
 
   if (use_parametric_trend) {
-    trend_kappa = toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
+    if (hierarchical_trend) {
+      trend_kappa = toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
+    } else {
+      trend_kappa = rep_vector(toplevel_trend_kappa, D_total);
+    }
   }
 
   if (use_log_R0 && hierarchical_R0_model) {
@@ -361,8 +366,11 @@ model {
 
   if (use_parametric_trend) {
     trend_lambda ~ beta(3, 1);
-    trend_log_kappa_effect_subnational_sd ~ std_normal();
-    trend_log_kappa_effect_subnational_raw ~ std_normal();
+
+    if (hierarchical_trend) {
+      trend_log_kappa_effect_subnational_sd ~ std_normal();
+      trend_log_kappa_effect_subnational_raw ~ std_normal();
+    }
   }
 
   if (fit_model) {
