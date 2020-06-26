@@ -16,6 +16,7 @@ Options:
   --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
+  --include-param-trend  Include parametric trend.
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
@@ -297,6 +298,7 @@ stan_data <- lst(
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
+  use_parametric_trend = script_options$`include-param-trend`,
 
   # Hyperparameters
 
@@ -315,6 +317,7 @@ stan_data <- lst(
 
   start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
+  first_case_day_index = use_subnat_data$first_case_day_index,
   days_to_impute_cases = days_seeding %/% time_resolution,
   days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
@@ -489,7 +492,7 @@ tryCatch({
   subnat_results <- mob_fit %>%
     extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
 
-  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
+  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend")
 
   if (!script_options$`no-predict`) {
     day_param %<>% c("deaths_rep")

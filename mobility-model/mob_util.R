@@ -29,10 +29,13 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
     if (is.finite(first_observed_death)) {
       daily_data %>%
         mutate(
-          new_deaths = if_else(is.na(new_deaths), 0, new_deaths),
+          new_deaths = coalesce(new_deaths, 0),
           cum_deaths = if_else(is.na(cum_deaths) & date < first_observed_death, 0, cum_deaths),
-          new_deaths = if_else(is.na(new_deaths), cum_deaths - lag(cum_deaths, default = 0), new_deaths),
-          cum_deaths = if_else(is.na(cum_deaths), cumsum(new_deaths), cum_deaths),
+          new_deaths = coalesce(new_deaths, cum_deaths - lag(cum_deaths, default = 0)),
+          cum_deaths = coalesce(cum_deaths, cumsum(new_deaths)),
+
+          new_cases = coalesce(new_cases, 0),
+          cum_cases = zoo::na.locf0(cum_cases) %>% coalesce(0)
         )
     } else return(daily_data)
   }
@@ -61,6 +64,12 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
                                    ~ filter(.x, !is.na(cum_deaths) | !is.na(new_deaths)) %>%
                                      pull(date) %>%
                                      max()) %>%
+        lubridate::as_date(),
+
+      first_case_day = map_dbl(daily_data,
+                         ~ filter(.x, cum_cases > 0) %>%
+                           pull(date) %>%
+                           min()) %>%
         lubridate::as_date(),
 
       first_mob_day = map_dbl(daily_data,
@@ -102,6 +111,11 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
                     average_all_mob = (g_transit_stations + g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 5) %>%
         map(arrange, date) %>%
         map(mutate, day_index = seq(n())),
+
+      first_case_day_index = map_dbl(daily_data,
+                         ~ filter(.x, cum_cases > 0) %>%
+                           pull(day_index) %>%
+                           min()),
 
       country_index = group_indices(., country_code) # For SLURM runs on cluster server
     )
