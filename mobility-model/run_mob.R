@@ -407,8 +407,8 @@ make_initializer <- function(stan_data) {
 
       trend_lambda = if (stan_data$use_parametric_trend) rbeta(N, 3, 1) else array(dim = 0),
       toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
-      trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) abs(rnorm(stan_data$N_national, 0, 1)) else array(dim = 0),
-      trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) rnorm(N, 0, 1) else array(dim = 0),
+      trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(abs(rnorm(stan_data$N_national, 0, 1))) else array(dim = 0),
+      trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(rnorm(N, 0, 1)) else array(dim = 0),
       trend_kappa = rnorm(N, 0, 0.5),
     )
   }

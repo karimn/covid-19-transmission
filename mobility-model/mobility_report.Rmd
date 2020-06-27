@@ -87,7 +87,6 @@ results %>%
 ```{r param-trend, fig.height=6, fig.width=12}
 results %>% 
   plot_day_ci(par = "trend", use_date = TRUE) +
-  geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("Trend")) 
 ```
 
