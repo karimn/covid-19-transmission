@@ -14,6 +14,9 @@ functions {
     return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths);
     // return neg_binomial_2_lpmf(deaths | mean_deaths[start:end], overdisp_deaths[day_subnat_idx[start:end]]);
   }
+
+  vector contact_rate(vector trend_day_index, real lambda, real kappa) {
+    return lambda + (1 - lambda) * inv_logit(kappa * trend_day_index);
 }
 
 data {
@@ -267,8 +270,7 @@ transformed parameters {
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
         if (use_parametric_trend) {
-          // log_trend[days_pos:days_end] = log_mix(trend_lambda[curr_full_subnat_pos], 0, log_inv_logit(trend_kappa[curr_full_subnat_pos] * trend_day_index[days_pos:days_end]));
-          trend[days_pos:days_end] = trend_lambda[curr_full_subnat_pos] + (1 - trend_lambda[curr_full_subnat_pos]) * inv_logit(trend_kappa[curr_full_subnat_pos] * trend_day_index[days_pos:days_end]);
+          trend[days_pos:days_end] = contract_rate(trend_day_index[days_pos:days_end], trend_lambda[curr_full_subnat_pos], trend_kappa[curr_full_subnat_pos]);
         }
 
         if (hierarchical_mobility_model && num_subnat > 1) {
