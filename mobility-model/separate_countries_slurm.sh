@@ -14,5 +14,4 @@ RUN_SUFFIX=$2
 OUTPUT_ARGS="-o {all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${RUN_SUFFIX} --output-dir=${SCRATCH}/kremer_lab/karimn/mob_results"
 HIERARCH_ARGS="--no-partial-pooling=trend"
 
-Rscript run_mob.R $1 ${SLURM_ARRAY_TASK_ID} -i $3 --hyperparam=separate_hyperparam.yaml --show-script-options --include-param-trend
- $OUTPUT_ARGS $HIERARCH_ARGS
+Rscript run_mob.R $1 ${SLURM_ARRAY_TASK_ID} -i $3 --hyperparam=separate_hyperparam.yaml --show-script-options --include-param-trend $OUTPUT_ARGS $HIERARCH_ARGS
