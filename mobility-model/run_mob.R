@@ -25,8 +25,11 @@ Options:
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-predict  No prediction
+  --random-init Use default Stan initialiser settings instead of custom initialiser [default: FALSE]
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --show-script-options
+  --region Key name used for selecting a single region in a country, e.g. SE_110 in Sweden
+  --save-warmup Save warmup part of chains? [default: FALSE]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
@@ -174,6 +177,15 @@ if (!is_empty(script_options$`country-code`)) {
   }
 } else {
   use_subnat_data <- subnat_data
+}
+
+if (!is_empty(script_options$`region`)) {
+  cat("\nFiltering regions by key...")
+  use_subnat_data <- subnat_data %>%
+    filter(fct_match(key, script_options$`region`))
+  cat("done.\n")
+} else {
+  cat("Using all available regions.\n")
 }
 
 if (any(!use_subnat_data$is_valid)) {
@@ -437,9 +449,9 @@ if (script_options$cmdstan) {
       adapt_delta = 0.95,
       max_treedepth = 12
     ),
-    # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
-    init = make_initializer(stan_data),
-    save_warmup = FALSE,
+    init = if (script_options$`random-init`) "random" else make_initializer(stan_data),
+    # init = make_initializer(stan_data),
+    save_warmup = script_options$`save-warmup`,
     # par = "mean_deaths",
     # include = FALSE
   )
