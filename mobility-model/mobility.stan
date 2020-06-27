@@ -147,7 +147,7 @@ transformed data {
         for (day_index in 1:num_days) {
           int curr_day_pos = day_pos + day_index - 1;
 
-          trend_day_index[curr_day_pos] = first_case_day_index[curr_subnat_pos] - day_index;
+          trend_day_index[curr_day_pos] = day_index - first_case_day_index[curr_subnat_pos];
         }
 
         day_pos = day_end + 1;
@@ -212,14 +212,14 @@ transformed parameters {
 
   vector[N] ifr = mean_ifr .* ifr_noise;
 
-  vector[use_parametric_trend && hierarchical_trend ? N : 0] trend_kappa;
+  vector[use_parametric_trend ? N : 0] trend_kappa;
   vector<lower = 0, upper = 1>[D_total] trend = rep_vector(1, D_total);
 
   if (use_parametric_trend) {
     if (hierarchical_trend) {
       trend_kappa = toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
     } else {
-      trend_kappa = rep_vector(toplevel_trend_kappa, D_total);
+      trend_kappa = rep_vector(toplevel_trend_kappa, N);
     }
   }
 
