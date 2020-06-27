@@ -319,6 +319,8 @@ stan_data <- lst(
   hyperparam_toplevel_R0_sd = 0.25,
   hyperparam_tau_national_effect_log_R0_sd = 0.1,
   hyperparam_tau_subnational_effect_log_R0_sd = 0.08,
+  
+  tau_impute_cases_inv_mean = 0.03,
 
   # Data
 

@@ -56,6 +56,8 @@ data {
   real<lower = 0> hyperparam_tau_subnational_effect_log_R0_sd;
 
   real<lower = 0> hyperparam_toplevel_R0_sd;
+  
+  real<lower = 0> tau_impute_cases_inv_mean;
 }
 
 transformed data {
@@ -275,7 +277,7 @@ model {
   overdisp_deaths ~ normal(0, 5);
   ifr_noise ~ normal(1, 0.1);
 
-  tau_impute_cases ~ exponential(0.03);
+  tau_impute_cases ~ exponential(tau_impute_cases_inv_mean);
   imputed_cases ~ exponential(1 / tau_impute_cases);
 
   beta_toplevel ~ normal(0, hyperparam_tau_beta_toplevel);
