@@ -451,7 +451,7 @@ if (script_options$cmdstan) {
     ),
     init = if (script_options$`random-init`) "random" else make_initializer(stan_data),
     # init = make_initializer(stan_data),
-    save_warmup = script_options$`save-warmup`,
+    save_warmup = as.logical(script_options$`save-warmup`)
     # par = "mean_deaths",
     # include = FALSE
   )
