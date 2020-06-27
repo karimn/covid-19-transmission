@@ -83,11 +83,17 @@ results %>%
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
+Contact rate function: \[ cr(t; t^*, \lambda_j, \kappa) = \lambda_j + \frac{1 - \lambda_j}{1 + \exp(\kappa (t - t^*))} \]
+where 
+\begin{align*}
+\lambda_j &\sim \mathtt{Beta}(3, 1) \\
+\kappa &\sim \mathtt{NegHalfNormal}(0, 1).
+\end{align*}
 
 ```{r param-trend, fig.height=6, fig.width=12}
 results %>% 
   plot_day_ci(par = "trend", use_date = TRUE) +
-  labs(title = TeX("Trend")) 
+  labs(title = TeX("Contract Rate")) 
 ```
 
 ```{r mobility-effect-plot, fig.height=6, fig.width=12}
@@ -109,8 +115,9 @@ results %>%
   geom_vline(xintercept = 1, linetype = "dotted") +
   labs(title = TeX("$R_{t,m}$ on the last day")) 
 ```
+Mobility linear model: $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
 
-```{r, fig.width=10}
+```{r beta, fig.width=10}
 results %>% 
   plot_subnat_ci(beta = TRUE) + 
   labs(title = TeX("$\\beta$"))
