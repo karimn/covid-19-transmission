@@ -1,0 +1,106 @@
+---
+title: "Modeling Heterogeneous COVID-19 Spread"
+output: pdf_document
+header-includes:
+  - \usepackage{pxfonts} 
+bibliography: ../references.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Motivation
+
+Many areas of the developing world (e.g. Kenya, India, Mexico) currently have relatively few confirmed COVID-19 cases or deaths. It is unclear whether the official data simply reflects a lack of testing, delayed seeding of an epidemic that will spread rapidly, or fundamental epidemiological differences (due to biological or disease transmission factors). 
+
+Better understanding of COVID-19 spread in developing countries could be critical to better informed policies.  Much of the existing COVID-19 modeling focuses on developed countries, but there are a variety of reasons that the spread of the epidemic might potentially differ in low-income countries For example, as suggested by Carleton & Meng (2020) and Wang et al. (2020), differences in temperature and humidity could affect disease transmission.  Demographic structure is very different in developing countries, with many more young people and fewer elderly people. There may also be differences in the levels of seeding with different countries putting into place measures with different levels of stringency. For example, India and South Africa have imposed lockdown policies that will likely impose significant economic and social costs, while other countries, such as Mexico, have done much less. Patterns of social interaction in rural areas of developing countries and urban slums differ substantially both from each other and from typical patterns of interaction in developed countries. There are also important differences in health care quality and utilization, state capacity, and social norms within and across developing countries. These factors may affect both the spread of the disease in the absence of policy measures and the impact of policy measures.  
+
+# Project
+
+The project using global data both across and within countries to study heterogeneity in $R_0$ and its evolution over time, $R_t$. We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do.
+
+<!-- Karim and Witold - feel free to expand on the model here -->
+
+First, the transmission of infection $c_{tm}$, in sub-region $m$ on day $t$, is modeled, for $t > 6$, as
+\begin{align*} 
+  c_{tm} &= S_{tm} R_{tm} \sum_{\tau=1}^{t-1} c_{\tau,m} \tilde{g}_{\tau - 1},  
+\end{align*}
+and for the first six days we impute the number of cases as
+\begin{align*}
+  c_{tm} = c_{m}^\textrm{imputed} &\sim \mathtt{Exponential}(\frac{1}{\tau^\textrm{imputed}}) \\ 
+  \tau^{imputed} &\sim \mathtt{Exponential}(0.03)
+\end{align*}
+
+* $S_{tm} = 1 - \frac{\sum_{i = 1}^{t-1} c_{im}}{N_m}$ is the susceptible proportion of the population, where $N_m$ is the size of the population in sub-region $m$. 
+* $\tilde{g}_s$ are a discretization of the a continuous generation \[ g \sim \mathtt{Gamma}(6.5, 0.62), \] such that $g_s = \int_{\min(s-0.5,0)}^{s+0.5} p_g(\tau)\ \mathrm{d}\tau$, where $p_g$ is the density function for $g$.
+
+$R_{tm}$, the dynamic transmission rate is defined as 
+\[ R_{tm} = R_{0,m} \cdot \left[ 2 \cdot \phi^{-1} (\mathbf{X}_{tm}\boldsymbol{\beta}_{m})\right] \cdot \rho_{tm}. \]
+$R_{0m}$ is modeled as
+
+\begin{align*} 
+  \log R_{0m} &= \log R_0 + \delta_{k[m]} + \delta_m \\
+  \log R_0 &\sim \mathtt{Normal}(\mu_{R_0}, \tau_{R_0}) \\
+  \delta_{k} &\sim \mathtt{Normal}(0, \tau^{\delta,\textrm{nat}}) \\ 
+  \delta_{m} &\sim \mathtt{Normal}(0, \tau^{\delta,\textrm{subnat}}_{k[m]}) \\
+  \tau^{\delta,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.1) \\
+  \tau^{\delta,\textrm{subnat}}_k &\sim \mathtt{Normal}^+(0, 0.8).
+\end{align*}
+We use the subscript $k$ for countries and $m$ for their sub-regions. We use the following hyperparameters: $\tau_{R_0} = \sqrt{\log(\frac{0.25^2}{3.28^2} + 1)}, \mu_{R_0} = \log(3.28) - \frac{\tau_{R_0}^2}{2}$.^[Currently, we are only running countries separately so we are not using the national level effects on $R_0$.]   
+
+$R_t$ is predicted in the inverse logit function by the variables in the design matrix $\mathbf{X}$ such that each parameter in the vector $\boldsymbol{\beta}_m$ is modeled as
+\begin{align*}
+  \beta_{pm} &= \beta_p + \gamma_{p,k[m]} + \gamma_{pm} \\
+  \beta_p &\sim \mathtt{Normal}(0, 0.5) \\
+  \gamma_{pk} &\sim \mathtt{Normal}(0, \tau^{\gamma,\textrm{nat}}) \\
+  \gamma_{pm} &\sim \mathtt{Normal}(0, \tau^{\gamma,\textrm{subnat}}_{k[m]}) \\
+  \tau^{\gamma,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.25) \\
+  \tau^{\gamma,\textrm{subnat}}_{k[m]} &\sim \mathtt{Normal}^+(0, 0.5).
+\end{align*}
+In addition, we include parametric model of reduced contact rate such that 
+\begin{align*}
+  \rho_{tm} &= \lambda_m + \frac{1 - \lambda_m}{1 + \exp(\kappa(t - t^*_m))} \\
+  \lambda_m &\sim \mathtt{Beta}(3, 1) \\
+  \kappa &\sim \mathtt{Normal}^-(0, 1). 
+\end{align*}
+This is a smoothly decreasing trend in contact representing unobservable qualitative changes in social contact not captured by mobility data. The midpoint of this trend, $t^*_m$, is the day the first covid-19 case is detected. 
+
+The expected number of deaths, $d_{tm}$ is modeled as
+\begin{align*}
+  d_{tm} = \textrm{ifr}^*_m \sum_{\tau = 1}^{t-1} c_{\tau,m} \tilde{\pi}_{t-\tau},
+\end{align*}
+where the infection fatality rate (IFR), $\textrm{ifr}^*_m$, is modeled as
+\begin{align*}
+  \textrm{ifr}^*_m &= \eta_m \cdot \textrm{ifr}_m \\
+  \eta_m &\sim \mathtt{Normal}(1, 0.1).
+\end{align*}
+In other words we perturb the pre-calculated IFR by a small random variable. Time-to-deaths, $\pi_s$, is modeled as a continuous distribution
+\[ \pi_s \sim \mathtt{Gamma}(5.1, 0.86) + \mathtt{Gamma}(17.8, 0.45),\]
+which we discretized as $\tilde{\pi}_s = \int_{\min(s-0.5, 0)}^{s+0.5} p_\pi(\tau)\,\mathrm{d}\tau$, where $p_\pi$ is the density function of $\pi$.
+
+Finally, the likelihood model for number of deaths, $D_{tm}$, is 
+\[ D_{tm} \sim \mathtt{NegativeBinomial}(d_{tm}, d_{tm} + \frac{d_{tm}^2}{\psi}), \]
+and $\psi \sim \mathtt{Normal}^+(0, 5)$.
+
+<!-- Similar to how we bring in time varying mobility to the model, can we do the same for weather? Happy to discuss -->
+
+We focus on several potential drivers of heterogeneity:
+
+* Lower mortality risk due to demographics and co-morbidity
+* Under-reporting / Testing regimes
+* Low level of seeding
+* High heterogeneity within country 
+* Climate
+* Difference government measures
+
+# Data 
+
+We use covid data from X countries and x sub-national units…
+[Summary statistics]
+
+We use Google mobility data, government stringency index from Oxford, and population weighted climate data as supplementary sources of data.
+
+# Preliminary Results
+
+# References {-}
