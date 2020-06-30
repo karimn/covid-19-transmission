@@ -44,6 +44,7 @@ For this reason, instead of following a hypothesis-testing approach, we will aim
 We use data from 120 countries, 30 of which report COVID outcomes at a sub-national level (usually administrative regions such as states in the USA, lands in Germany, states in India etc.). We arrange our data in a hierarchical model, but if sub-national data are missing, we only estimate the national-level parameters (see below). When the sub0national estimates are available, the aggregate, national-level data are not used for inference. 
 
 The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
+For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @verity_estimates_2020 in Chinese individuals through age distribution based on World Population Prospects data.
 
 
 
