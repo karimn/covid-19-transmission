@@ -35,12 +35,21 @@ _Decrease over time_. Assuming that the virus was seeded in a particular setting
 * Heterogeneous spread of the virus across communities. The higher risk, "higher R" individuals were affected first and the remaining part of the population reproduces the virus at lower rates. Herd immunity can also play a part in this mechanism. This is different from low $\mathcal{R}_0$, in that the initial observed infection rate will be high, and only subsequently decrease.
 * Change in behaviour in the absence or in addition to government policy, such as can be observed in drops in mobility data in many countries which precede gov't intervention
 
-We hope to distinguish between the five main mechanisms by using the Bayesian hierarchical model. However, many of the possible mechanisms that can lead to no epidemic are not distinguishable from each other. A simple example is near reciprocal relationship of $R_0$ and initial seeding. For this reason, instead of following a hypothesis-testing approach, we will aim to make a probablistic argument and use subjective priors. For example, both $R_0$ and the number of cases early in the epidemic can have strongly informative prior distributions constructed based on travel data, literature on SARS transmission, models of seeding and history of contagion from previous pandemics _etc._ By introducing these additional assumptions we hope to be able to identify the main parameters of the model and characterise the main drivers of heterogeneity in the COVID impact.
+We hope to distinguish between the five main mechanisms by using the Bayesian hierarchical model. However, many of the possible mechanisms that can lead to no epidemic are not distinguishable from each other. A simple example is the near reciprocal relationship of $R_0$ and initial seeding. 
+For this reason, instead of following a hypothesis-testing approach, we will aim to make a probablistic argument and use subjective priors. For example, both $R_0$ and the number of cases early in the epidemic can have strongly informative prior distributions constructed based on travel data, literature on SARS transmission, models of seeding and history of contagion from previous pandemics _etc._ By introducing these additional assumptions we hope to be able to identify the main parameters of the model and characterise the main drivers of heterogeneity in the COVID impact.
 
 
-# Project
+# Data
 
-The project using global data both across and within countries to study heterogeneity in $R_0$ and its evolution over time, $R_t$. We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do.
+We use data from 120 countries, 30 of which report COVID outcomes at a sub-national level (usually administrative regions such as states in the USA, lands in Germany, states in India etc.). We arrange our data in a hierarchical model, but if sub-national data are missing, we only estimate the national-level parameters (see below). When the sub0national estimates are available, the aggregate, national-level data are not used for inference. 
+
+The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
+
+
+
+# Bayesian model of COVID transmission in countries and regions
+
+We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do.
 
 <!-- Karim and Witold - feel free to expand on the model here -->
 
@@ -86,7 +95,7 @@ In addition, we include parametric model of reduced contact rate such that
   \lambda_m &\sim \mathtt{Beta}(3, 1) \\
   \kappa &\sim \mathtt{Normal}^-(0, 1). 
 \end{align*}
-This is a smoothly decreasing trend in contact representing unobservable qualitative changes in social contact not captured by mobility data. The midpoint of this trend, $t^*_m$, is the day the first covid-19 case is detected. 
+This is a smoothly decreasing trend in contact representing unobservable qualitative changes in social contact not captured by mobility data. The midpoint of this trend, $t^*_m$, is the day the first covid-19 case is detected. __Work in progress, t* will be defined differently__
 
 The expected number of deaths, $d_{tm}$ is modeled as
 \begin{align*}
@@ -105,23 +114,7 @@ Finally, the likelihood model for number of deaths, $D_{tm}$, is
 \[ D_{tm} \sim \mathtt{NegativeBinomial}(d_{tm}, d_{tm} + \frac{d_{tm}^2}{\psi}), \]
 and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 
-<!-- Similar to how we bring in time varying mobility to the model, can we do the same for weather? Happy to discuss -->
 
-We focus on several potential drivers of heterogeneity:
-
-* Lower mortality risk due to demographics and co-morbidity
-* Under-reporting / Testing regimes
-* Low level of seeding
-* High heterogeneity within country 
-* Climate
-* Difference government measures
-
-# Data 
-
-We use covid data from X countries and x sub-national units…
-[Summary statistics]
-
-We use Google mobility data, government stringency index from Oxford, and population weighted climate data as supplementary sources of data.
 
 # Preliminary Results
 
