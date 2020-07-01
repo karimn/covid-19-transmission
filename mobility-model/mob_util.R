@@ -245,11 +245,12 @@ plot_day_ci <- function(results, par, use_date = FALSE) {
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9, group = parameter), alpha = 0.25) +
     scale_color_discrete("") +
     labs(x = "", y = "",
-         caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
+         caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.
+                    Ribbons represent the 80% credible intervals.") +
+    facet_wrap(vars(sub_region), ncol = 3) + #, strip.position = "left") +
     theme(
-      strip.placement = "outside",
-      strip.text = element_text(angle = 0),
+      # strip.placement = "outside",
+      # strip.text.y.left = element_text(angle = 0),
       axis.text.x = if (!use_date) element_blank()
     )
 }
@@ -285,7 +286,7 @@ plot_post_deaths <- function(results) {
     labs(x = "", y = "New Deaths",
          caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.
                     Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), scales = "free_y") +
+    facet_wrap(vars(sub_region), scales = "free_y", ncol = 3) +
     NULL
 }
 
