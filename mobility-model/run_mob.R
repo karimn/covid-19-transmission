@@ -23,15 +23,15 @@ Options:
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
-  --region Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
+  --region  Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-predict  No prediction
-  --random-init Use default Stan initialiser settings instead of custom initialiser.
+  --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
-  --save-warmup Save warmup part of chains?
+  --save-warmup  Save warmup part of chains?
 ") -> opt_desc
 
 script_options <- if (interactive()) {
