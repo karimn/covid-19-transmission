@@ -168,15 +168,22 @@ and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 # Preliminary results -- illustration
 
 ```{r results-setup}
-results <- read_rds(file.path("..", "data", "mobility", "results", params$results_file)) %>%
+results_all <- read_rds(file.path("..", "data", "mobility", "results", params$results_file)) 
+
+results <- results_all %>%
   filter(fct_match(country_code, params$country_code))
 
 country_name <- results$country_name %>% unique()
 ```
 
-In this section we will demonstrate some of the main results of the analysis described here, using data from `r country_name`. While we only show one country, so far this analysis was done on data from 19 countries out of 30.
+In this section we illustrate some of the main modelling outputs. For this example we are using data from `r country_name` (with exception of Figure \ref{fig:all-countries}). While we only show one country, this analysis has already been done on data from 19 countries out of 30.
 
-In Figure \ref{fig:R0-plot}, we summarize the posterior distribution of $R_0$ across all sub-regions. 
+* Compilation of seeding and R0 estimates across all countries that have sub0national data is in Figure \ref{fig:all-countries}.
+* In Figure \ref{fig:R0-plot}, we summarize the posterior distribution of $R_0$ across all sub-regions. 
+* In Figure \ref{fig:Rt-plot}, we summarize the full time-series of $R_t$'s evolution across all sub-regions.
+* In Figure \ref{fig:post-deaths}, we compare the model's predicted number of deaths with actual data.
+* Region-specific coeffcients are shown in Figure \ref{fig:beta}. Note that the mobility linear model is $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
+
 
 ```{r R0-plot, fig.width=10, fig.cap="$R_0$ across all sub-regions. Points represent the posterior median, diamonds the posterior mean, and line ranges are the 90% credible intervals."}
 gridExtra::grid.arrange(grobs = list(
@@ -194,7 +201,7 @@ ncol = 2)
 
 ```
 
-In Figure \ref{fig:Rt-plot}, we summarize the full time-series of $R_t$'s evolution across all sub-regions.
+
 
 ```{r Rt-plot, fig.height=12, fig.width=10, fig.cap="Adjusted $R_{t}$ across all regions."}
 results %>% 
@@ -205,7 +212,7 @@ results %>%
   NULL
 ```
 
-In Figure \ref{fig:post-deaths}, we compare the model's predicted number of deaths with actual data.
+
 
 ```{r post-deaths, fig.height=12, fig.width=10, fig.cap="Posterior predicted number of new deaths."}
 results %>% 
@@ -220,7 +227,25 @@ results %>%
   labs(title = TeX("$\\beta$"))
 ```
 
-Mobility linear model is $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
+
+
+```{r all-countries, fig.height=12, fig.width=10, fig.cap="Seeding and R0 for all currently fitted countries that have sub-country data."}
+results_all %>% 
+  unnest(param_results) %>%
+  filter(parameter %in% c("R0", "imputed_cases")) %>%
+  mutate(mean = ifelse(parameter == "imputed_cases", log(mean), mean)) %>%
+  mutate(parameter = ifelse(parameter == "imputed_cases", "Log(seeded cases)", "R0")) %>% 
+  ggplot(aes(y = country_name, x = mean, color = country_name)) + 
+  geom_jitter() +
+  theme(legend.position = "none") +
+  facet_wrap( ~ parameter, ncol = 3, scales = "free") +
+  labs(x="", y="") +
+  ggtitle("Seeding and R0 for countries and regions",
+        paste("Each point is a mean Bayesian posterior for a single region.\n", 
+              "'Seeded cases' are the estimated number of infections 30 days prior to 10th death.\n",
+              "Regions with low infection rates not included currently."))
+```
+
 
 \pagebreak
 
