@@ -17,6 +17,7 @@ functions {
 
   vector contact_rate(vector trend_day_index, real lambda, real kappa) {
     return lambda + (1 - lambda) * inv_logit(kappa * trend_day_index);
+  }
 }
 
 data {
@@ -62,7 +63,7 @@ data {
   real<lower = 0> hyperparam_tau_subnational_effect_log_R0_sd;
 
   real<lower = 0> hyperparam_toplevel_R0_sd;
-  
+
   real<lower = 0> tau_impute_cases_inv_mean;
 }
 
@@ -272,7 +273,7 @@ transformed parameters {
         vector[total_days[curr_full_subnat_pos]] cumulative_cases = rep_vector(0, total_days[curr_full_subnat_pos]);
 
         if (use_parametric_trend) {
-          trend[days_pos:days_end] = contract_rate(trend_day_index[days_pos:days_end], trend_lambda[curr_full_subnat_pos], trend_kappa[curr_full_subnat_pos]);
+          trend[days_pos:days_end] = contact_rate(trend_day_index[days_pos:days_end], trend_lambda[curr_full_subnat_pos], trend_kappa[curr_full_subnat_pos]);
         }
 
         if (hierarchical_mobility_model && num_subnat > 1) {
