@@ -38,7 +38,7 @@ source(file.path("..", "mobility-model", "mob_util.R"))
 
 In what follows, we propose a Bayesian model that incorporates a number of different mechanisms that can explain heterogeneous epidemic growth rates. We then attempt to fit the model to national and sub-national data. We do this to, one, characterise heterogeneity in COVID spread and, two, to distinguish between the different factors that drive this heterogeneity. To do this, we use a hierarchical Bayesian model to synthesise evidence from the largest possible number of countries and regions.
 
-We consider five main potential mechanisms that can explain why some regions have been affected less, with particular focus on the factors that may be operating in the developing countries: 1) low risk of severe outcomes, 2) low seeding, 3) low $R_0$, 4) under-reporting of outcomes, 5) decrease in R over time due to behaviour change, government intervention or other factors.
+We consider five main potential mechanisms that can explain why some regions have been affected less, with particular focus on the factors that may be operating in the developing countries: 1) low risk of severe outcomes, 2) low seeding, 3) low $R_0$, 4) under-reporting of outcomes, 5) decrease in $R$ over time due to behaviour change, government intervention or other factors.
 
 _1) Low risk of severe disease_. While health care quality and utilisation may have an impact on COVID mortality, age is the main determinant of COVID outcomes. In developing countries mortality rates and risk of severe infections will therefore be lower. 
 
@@ -56,7 +56,7 @@ _4) Under-reporting or other data issues_. In many developing countries deaths d
 _5) Decrease over time_. Assuming that the virus was seeded in a particular setting and $R_0$ is sufficiently high (as evidenced by some local outbreaks), the lack of subsequent epidemic could be explained by a few competing hypotheses: 
 
 * Various government interventions designed to slow the spread of the virus through restrictions in activity, detection of cases, tracing of contacts
-* Heterogeneous spread of the virus across communities. The higher risk, "higher R" individuals were affected first and the remaining part of the population reproduces the virus at lower rates. Herd immunity can also play a part in this mechanism. This is different from low $R_0$, in that the initial observed infection rate will be high, and only subsequently decrease.
+* Heterogeneous spread of the virus across communities. The higher risk, "higher $R$" individuals were affected first and the remaining part of the population reproduces the virus at lower rates. Herd immunity can also play a part in this mechanism. This is different from low $R_0$, in that the initial observed infection rate will be high, and only subsequently decrease.
 * Change in behaviour in the absence or in addition to government policy, such as can be observed in drops in mobility data in many countries which precede gov't intervention
 
 We hope to distinguish between the five main mechanisms by using the Bayesian hierarchical model. However, many of the possible mechanisms that can lead to no epidemic are not distinguishable from each other. A simple example is the near reciprocal relationship of $R_0$ and initial seeding. 
@@ -72,9 +72,7 @@ For each country we calculate the expected infection fatality rate (IFR) by rewe
 
 # Bayesian model of COVID transmission in countries and regions
 
-We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do.
-
-<!-- Karim and Witold - feel free to expand on the model here -->
+We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do. This is one direction we hope to expand the model by including more predictors.^[Regularization using priors will assist us in avoiding overfitting to the data.]
 
 First, the transmission of infection $c_{tm}$, in sub-region $m$ on day $t$, is modeled, for $t > 6$, as
 \begin{align*} 
@@ -83,39 +81,46 @@ First, the transmission of infection $c_{tm}$, in sub-region $m$ on day $t$, is 
 
 and for the first six days we impute the number of cases as
 
-\begin{align}\label{eq:imputed}
-  c_{tm} = c_{m}^\textrm{imputed} &\sim \mathtt{Exponential}\left(\frac{1}{\tau^\textrm{imputed}}\right) \\ 
-  \tau^{imputed} &\sim \mathtt{Exponential}(0.03)
-\end{align}
+\begin{gather}
+  \begin{aligned}
+  c_{tm} = c_{m}^\textrm{imputed} &\sim \mathtt{Exponential}\left(\frac{1}{\tau^\textrm{imputed}}\right) \\
+  \tau^{imputed} &\sim \mathtt{Exponential}(0.03).
+  \end{aligned}\label{eq:imputed}
+\end{gather}
 
 * $S_{tm} = 1 - \frac{\sum_{i = 1}^{t-1} c_{im}}{N_m}$ is the susceptible proportion of the population, where $N_m$ is the size of the population in sub-region $m$. 
 * $\tilde{g}_s$ are a discretization of the a continuous generation \[ g \sim \mathtt{Gamma}(6.5, 0.62), \] such that $g_s = \int_{\min(s-0.5,0)}^{s+0.5} p_g(\tau)\ \mathrm{d}\tau$, where $p_g$ is the density function for $g$.
+
 
 $R_{tm}$, the dynamic transmission rate is defined as 
 \[ R_{tm} = R_{0,m} \cdot \left[ 2 \cdot \phi^{-1} (\mathbf{X}_{tm}\boldsymbol{\beta}_{m})\right] \cdot \rho_{tm}. \]
 $R_{0m}$ is modeled as
 
-\begin{align}\label{eq:r0}
+\begin{gather}
+\begin{aligned}
   \log R_{0m} &= \log R_0 + \delta_{k[m]} + \delta_m \\
   \log R_0 &\sim \mathtt{Normal}(\mu_{R_0}, \tau_{R_0}) \\
   \delta_{k} &\sim \mathtt{Normal}(0, \tau^{\delta,\textrm{nat}}) \\ 
   \delta_{m} &\sim \mathtt{Normal}(0, \tau^{\delta,\textrm{subnat}}_{k[m]}) \\
   \tau^{\delta,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.1) \\
   \tau^{\delta,\textrm{subnat}}_k &\sim \mathtt{Normal}^+(0, 0.8).
-\end{align}
+\end{aligned}\label{eq:r0}
+\end{gather}
 
 We use the subscript $k$ for countries and $m$ for their sub-regions. We use the following hyperparameters: $\tau_{R_0} = \sqrt{\log(\frac{0.25^2}{3.28^2} + 1)}, \mu_{R_0} = \log(3.28) - \frac{\tau_{R_0}^2}{2}$.^[Currently, we are only running countries separately so we are not using the national level effects on $R_0$.] Estimation of this parameter is shown in Figure \ref{fig:R0-plot}.  
 
 $R_t$ is predicted in the inverse logit function by the variables in the design matrix $\mathbf{X}$ such that each parameter in the vector $\boldsymbol{\beta}_m$ is modeled as
 
-\begin{align*}
+\begin{gather}
+\begin{aligned}
   \beta_{pm} &= \beta_p + \gamma_{p,k[m]} + \gamma_{pm} \\
   \beta_p &\sim \mathtt{Normal}(0, 0.5) \\
   \gamma_{pk} &\sim \mathtt{Normal}(0, \tau^{\gamma,\textrm{nat}}) \\
   \gamma_{pm} &\sim \mathtt{Normal}(0, \tau^{\gamma,\textrm{subnat}}_{k[m]}) \\
   \tau^{\gamma,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.25) \\
   \tau^{\gamma,\textrm{subnat}}_{k[m]} &\sim \mathtt{Normal}^+(0, 0.5).
-\end{align*}
+\end{aligned}\label{eq:beta}
+\end{gather}
 Estimation of this parameter is shown in Figure \ref{fig:Rt-plot}.
 
 In addition, we include parametric model of reduced contact rate such that 
@@ -149,15 +154,13 @@ Finally, the likelihood model for number of deaths, $D_{tm}$, is
 \[ D_{tm} \sim \mathtt{NegativeBinomial}(d_{tm}, d_{tm} + \frac{d_{tm}^2}{\psi}), \]
 and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 
-
+There are two main components of the model that allow us to model the heterogeneity of transmission. First, as shown in \eqref{eq:r0}, our model allows countries and their sub-regions to deviate from the superpopulation level of $R_0$ by introducing an additive country and sub-region random effect to the logarithm of $R_0$. In addition, we model the variance for this heterogeneity by including it as a parameter of the model, and for each country, we allow this variance to vary independently over its sub-regions. Second, the linear parameters in \eqref{eq:beta}, that govern how time varying mobility variables (or whatever other predictors we include), also vary additively over countries and sub-regions. 
 
 ## How does the model address the research questions
 
-1. _Low risk of severe disease_: as per (\ref{eq:d_tm}), the model assumes
-2. _Low seeding_: this is addressed by (\ref{eq:imputed})
-3. _Low $R_0$_: this is addressed by (\ref{eq:r0})
-
-
+1. _Low risk of severe disease_: as per \eqref{eq:d_tm}, the model assumes
+2. _Low seeding_: this is addressed by \eqref{eq:imputed}
+3. _Low $R_0$_: this is addressed by \eqref{eq:r0}
 
 # Preliminary results -- illustration
 
