@@ -40,20 +40,20 @@ In what follows, we propose a Bayesian model that incorporates a number of diffe
 
 We consider five main potential mechanisms that can explain why some regions have been affected less, with particular focus on the factors that may be operating in the developing countries: 1) low risk of severe outcomes, 2) low seeding, 3) low $\mathcal{R}_0$, 4) under-reporting of outcomes, 5) decrease in R over time due to behaviour change, government intervention or other factors.
 
-_Low risk of severe disease_. While health care quality and utilisation may have an impact on COVID mortality, age is the main determinant of COVID outcomes. In developing countries mortality rates and risk of severe infections will therefore be lower. 
+_1) Low risk of severe disease_. While health care quality and utilisation may have an impact on COVID mortality, age is the main determinant of COVID outcomes. In developing countries mortality rates and risk of severe infections will therefore be lower. 
 
-_Low seeding_. In deterministic models of infectious diseases, a single case is enough to start the exponential growth in infections. In the real world, however, due to stochastic nature of contacts, more cases may be needed to start an epidemic. We can assume that many places were not (yet) affected by the epidemic due to number of COVID cases at any point has not reached this epidemic threshold. This, in turn, can be due to low connectedness of different regions (especially in developing countries), early government restrictions on travel or simply due to chance.
+_2) Low seeding_. In deterministic models of infectious diseases, a single case is enough to start the exponential growth in infections. In the real world, however, due to stochastic nature of contacts, more cases may be needed to start an epidemic. We can assume that many places were not (yet) affected by the epidemic due to number of COVID cases at any point has not reached this epidemic threshold. This, in turn, can be due to low connectedness of different regions (especially in developing countries), early government restrictions on travel or simply due to chance.
 
-_Low $\mathcal{R}_0$_. When reproductive rate of the virus is low, the numbers of cases may either decrease or build up very slowly, with no evident exponential trend for many months. Various factors can explain low $\mathcal{R}_0$
+_3) Low $\mathcal{R}_0$_. When reproductive rate of the virus is low, the numbers of cases may either decrease or build up very slowly, with no evident exponential trend for many months. Various factors can explain low $\mathcal{R}_0$
 
 * Lower number of super-spreaders or super-spreading events
 * Low population density 
 * Social norms and social network structure
 * Climate (fixed) or weather (time-dependent factors, which will act on $R_t$ - see below)
 
-_Under-reporting or other data issues_. In many developing countries deaths due to COVID may either not be attributed to SARS-COV-2 infection or not recorded at all. Even worse, this under-counting cannot be assumed to be constant over time.
+_4) Under-reporting or other data issues_. In many developing countries deaths due to COVID may either not be attributed to SARS-COV-2 infection or not recorded at all. Even worse, this under-counting cannot be assumed to be constant over time.
 
-_Decrease over time_. Assuming that the virus was seeded in a particular setting and $\mathcal{R}_0$ is sufficiently high (as evidenced by some local outbreaks), the lack of subsequent epidemic could be explained by a few competing hypotheses: 
+_5) Decrease over time_. Assuming that the virus was seeded in a particular setting and $\mathcal{R}_0$ is sufficiently high (as evidenced by some local outbreaks), the lack of subsequent epidemic could be explained by a few competing hypotheses: 
 
 * Various government interventions designed to slow the spread of the virus through restrictions in activity, detection of cases, tracing of contacts
 * Heterogeneous spread of the virus across communities. The higher risk, "higher R" individuals were affected first and the remaining part of the population reproduces the virus at lower rates. Herd immunity can also play a part in this mechanism. This is different from low $\mathcal{R}_0$, in that the initial observed infection rate will be high, and only subsequently decrease.
@@ -65,7 +65,7 @@ For this reason, instead of following a hypothesis-testing approach, we will aim
 
 # Data
 
-We use data from 120 countries, 30 of which report COVID outcomes at a sub-national level (usually administrative regions such as states in the USA, lands in Germany, states in India etc.). We arrange our data in a hierarchical model, but if sub-national data are missing, we only estimate the national-level parameters (see below). When the sub0national estimates are available, the aggregate, national-level data are not used for inference. 
+We use data from 120 countries, 30 of which report COVID outcomes at a sub-national level (usually administrative regions such as states in the USA, lands in Germany, states in India etc.). We arrange our data in a hierarchical model, but if sub-national data are missing, we only estimate the national-level parameters (see below). When the sub-national estimates are available, the aggregate, national-level data are not used for inference. 
 
 The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
 For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data.
@@ -123,14 +123,18 @@ In addition, we include parametric model of reduced contact rate such that
 This is a smoothly decreasing trend in contact representing unobservable qualitative changes in social contact not captured by mobility data. The midpoint of this trend, $t^*_m$, is the day the first covid-19 case is detected. __Work in progress, t* will be defined differently__
 
 The expected number of deaths, $d_{tm}$ is modeled as
-\begin{align*}
+
+\begin{align}\label{eq:d_tm}
   d_{tm} = \textrm{ifr}^*_m \sum_{\tau = 1}^{t-1} c_{\tau,m} \tilde{\pi}_{t-\tau},
-\end{align*}
+\end{align}
+
 where the infection fatality rate (IFR), $\textrm{ifr}^*_m$, is modeled as
+
 \begin{align*}
   \textrm{ifr}^*_m &= \eta_m \cdot \textrm{ifr}_m \\
   \eta_m &\sim \mathtt{Normal}(1, 0.1).
 \end{align*}
+
 In other words we perturb the pre-calculated IFR by a small random variable. Time-to-deaths, $\pi_s$, is modeled as a continuous distribution
 \[ \pi_s \sim \mathtt{Gamma}(5.1, 0.86) + \mathtt{Gamma}(17.8, 0.45),\]
 which we discretized as $\tilde{\pi}_s = \int_{\min(s-0.5, 0)}^{s+0.5} p_\pi(\tau)\,\mathrm{d}\tau$, where $p_\pi$ is the density function of $\pi$.
@@ -139,7 +143,15 @@ Finally, the likelihood model for number of deaths, $D_{tm}$, is
 \[ D_{tm} \sim \mathtt{NegativeBinomial}(d_{tm}, d_{tm} + \frac{d_{tm}^2}{\psi}), \]
 and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 
-# Preliminary Results
+
+
+## How does the model address the research questions
+
+* Low risk of severe disease: \ref{eq:d_tm}
+
+
+
+# Preliminary results -- illustration
 
 ```{r results-setup}
 results <- read_rds(file.path("..", "data", "mobility", "results", params$results_file)) %>%
@@ -148,22 +160,29 @@ results <- read_rds(file.path("..", "data", "mobility", "results", params$result
 country_name <- results$country_name %>% unique()
 ```
 
-In this section we will demonstrate some of the main results of the analysis described here, using data from `r country_name`. We were actually able to run this analysis on data from 19 countries.
+In this section we will demonstrate some of the main results of the analysis described here, using data from `r country_name`. While we only show one country, so far this analysis was done on data from 19 countries out of 30.
 
 In Figure \ref{fig:R0-plot}, we summarize the posterior distribution of $R_0$ across all sub-regions. 
 
-```{r R0-plot, fig.width=10, fig.cap="$R_0$ across all sub-regions."}
-results %>% 
-  plot_subnat_ci(par = "R0") + 
-  labs(title = TeX("R_{0,m}")) +
-  theme(strip.text = element_blank()) +
-  labs(caption = "Points represent the posterior median, diamonds the posterior mean, and line ranges are the 90% credible intervals.") +
-  NULL
+```{r R0-plot, fig.width=10, fig.cap="$R_0$ across all sub-regions. Points represent the posterior median, diamonds the posterior mean, and line ranges are the 90% credible intervals."}
+gridExtra::grid.arrange(grobs = list(
+  results %>% 
+    plot_subnat_ci(par = "R0") + 
+    labs(title = TeX("R_{0,m}")) +
+    theme(strip.text = element_blank()) +
+    NULL,
+  
+  results %>% 
+    plot_subnat_ci(par = "imputed_cases") + 
+    labs(title = TeX("Number of initially infected (seeding)"))
+),
+ncol = 2)
+
 ```
 
 In Figure \ref{fig:Rt-plot}, we summarize the full time-series of $R_t$'s evolution across all sub-regions.
 
-```{r Rt-plot, fig.height=8, fig.width=10, fig.cap="Adjusted $R_{t}$ across all regions."}
+```{r Rt-plot, fig.height=12, fig.width=10, fig.cap="Adjusted $R_{t}$ across all regions."}
 results %>% 
   plot_day_ci(par = c("Rt_adj"), use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
@@ -174,10 +193,21 @@ results %>%
 
 In Figure \ref{fig:post-deaths}, we compare the model's predicted number of deaths with actual data.
 
-```{r post-deaths, fig.height=8, fig.width=10, fig.cap="Posterior predicted number of new deaths."}
+```{r post-deaths, fig.height=12, fig.width=10, fig.cap="Posterior predicted number of new deaths."}
 results %>% 
   plot_post_deaths() +
   labs(title = "Posterior predicted number of new deaths.")
 ```
+
+
+```{r beta, fig.width=10, fig.cap="Posterior distributions for model coefficients in the mobility model"}
+results %>% 
+  plot_subnat_ci(beta = TRUE) + 
+  labs(title = TeX("$\\beta$"))
+```
+
+Mobility linear model is $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
+
+\pagebreak
 
 # References {-}
