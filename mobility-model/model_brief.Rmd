@@ -1,13 +1,37 @@
 ---
 title: "Modeling Heterogeneous COVID-19 Spread"
-output: pdf_document
+output: 
+  bookdown::pdf_document2:
+    fig_caption: true
+    toc: false
 header-includes:
   - \usepackage{pxfonts} 
 bibliography: ../references.bib
+params:
+  results_file: lite_merged_trend.rds
+  country_code: BR 
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, echo=FALSE, include=FALSE}
+if (!interactive()) {
+  old_dir <- setwd("..")
+  source(file.path("renv", "activate.R"))
+  setwd(old_dir)
+}
+
+library(magrittr)
+library(tidyverse)
+library(cowplot)
+library(ggridges)
+library(haven)
+library(latex2exp)
+library(rstan)
+
+ggplot2::theme_set(theme_minimal())
+
+knitr::opts_chunk$set(echo = FALSE)
+
+source(file.path("..", "mobility-model", "mob_util.R"))
 ```
 
 # Research question
@@ -46,8 +70,6 @@ We use data from 120 countries, 30 of which report COVID outcomes at a sub-natio
 The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
 For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data.
 
-
-
 # Bayesian model of COVID transmission in countries and regions
 
 We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do.
@@ -60,7 +82,7 @@ First, the transmission of infection $c_{tm}$, in sub-region $m$ on day $t$, is 
 \end{align*}
 and for the first six days we impute the number of cases as
 \begin{align*}
-  c_{tm} = c_{m}^\textrm{imputed} &\sim \mathtt{Exponential}(\frac{1}{\tau^\textrm{imputed}}) \\ 
+  c_{tm} = c_{m}^\textrm{imputed} &\sim \mathtt{Exponential}\left(\frac{1}{\tau^\textrm{imputed}}\right) \\ 
   \tau^{imputed} &\sim \mathtt{Exponential}(0.03)
 \end{align*}
 
@@ -79,7 +101,7 @@ $R_{0m}$ is modeled as
   \tau^{\delta,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.1) \\
   \tau^{\delta,\textrm{subnat}}_k &\sim \mathtt{Normal}^+(0, 0.8).
 \end{align*}
-We use the subscript $k$ for countries and $m$ for their sub-regions. We use the following hyperparameters: $\tau_{R_0} = \sqrt{\log(\frac{0.25^2}{3.28^2} + 1)}, \mu_{R_0} = \log(3.28) - \frac{\tau_{R_0}^2}{2}$.^[Currently, we are only running countries separately so we are not using the national level effects on $R_0$.]   
+We use the subscript $k$ for countries and $m$ for their sub-regions. We use the following hyperparameters: $\tau_{R_0} = \sqrt{\log(\frac{0.25^2}{3.28^2} + 1)}, \mu_{R_0} = \log(3.28) - \frac{\tau_{R_0}^2}{2}$.^[Currently, we are only running countries separately so we are not using the national level effects on $R_0$.] Estimation of this parameter is shown in Figure \ref{fig:R0-plot}.  
 
 $R_t$ is predicted in the inverse logit function by the variables in the design matrix $\mathbf{X}$ such that each parameter in the vector $\boldsymbol{\beta}_m$ is modeled as
 \begin{align*}
@@ -90,6 +112,8 @@ $R_t$ is predicted in the inverse logit function by the variables in the design 
   \tau^{\gamma,\textrm{nat}} &\sim \mathtt{Normal}^+(0, 0.25) \\
   \tau^{\gamma,\textrm{subnat}}_{k[m]} &\sim \mathtt{Normal}^+(0, 0.5).
 \end{align*}
+Estimation of this parameter is shown in Figure \ref{fig:Rt-plot}.
+
 In addition, we include parametric model of reduced contact rate such that 
 \begin{align*}
   \rho_{tm} &= \lambda_m + \frac{1 - \lambda_m}{1 + \exp(\kappa(t - t^*_m))} \\
@@ -116,5 +140,44 @@ Finally, the likelihood model for number of deaths, $D_{tm}$, is
 and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 
 # Preliminary Results
+
+```{r results-setup}
+results <- read_rds(file.path("..", "data", "mobility", "results", params$results_file)) %>%
+  filter(fct_match(country_code, params$country_code))
+
+country_name <- results$country_name %>% unique()
+```
+
+In this section we will demonstrate some of the main results of the analysis described here, using data from `r country_name`. We were actually able to run this analysis on data from 19 countries.
+
+In Figure \ref{fig:R0-plot}, we summarize the posterior distribution of $R_0$ across all sub-regions. 
+
+```{r R0-plot, fig.width=10, fig.cap="$R_0$ across all sub-regions."}
+results %>% 
+  plot_subnat_ci(par = "R0") + 
+  labs(title = TeX("R_{0,m}")) +
+  theme(strip.text = element_blank()) +
+  labs(caption = "Points represent the posterior median, diamonds the posterior mean, and line ranges are the 90% credible intervals.") +
+  NULL
+```
+
+In Figure \ref{fig:Rt-plot}, we summarize the full time-series of $R_t$'s evolution across all sub-regions.
+
+```{r Rt-plot, fig.height=8, fig.width=10, fig.cap="Adjusted $R_{t}$ across all regions."}
+results %>% 
+  plot_day_ci(par = c("Rt_adj"), use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{tm}S_{tm}")) +
+  theme(axis.text.y = element_text(size = 7)) +
+  NULL
+```
+
+In Figure \ref{fig:post-deaths}, we compare the model's predicted number of deaths with actual data.
+
+```{r post-deaths, fig.height=8, fig.width=10, fig.cap="Posterior predicted number of new deaths."}
+results %>% 
+  plot_post_deaths() +
+  labs(title = "Posterior predicted number of new deaths.")
+```
 
 # References {-}
