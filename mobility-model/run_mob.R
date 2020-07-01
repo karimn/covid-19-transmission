@@ -25,11 +25,11 @@ Options:
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-predict  No prediction
-  --random-init Use default Stan initialiser settings instead of custom initialiser [default: FALSE]
+  --random-init Use default Stan initialiser settings instead of custom initialiser.
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --show-script-options
-  --region Key name used for selecting a single region in a country, e.g. SE_110 in Sweden
-  --save-warmup Save warmup part of chains? [default: FALSE]
+  --region Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
+  --save-warmup Save warmup part of chains?
 ") -> opt_desc
 
 script_options <- if (interactive()) {
@@ -319,7 +319,7 @@ stan_data <- lst(
   hyperparam_toplevel_R0_sd = 0.25,
   hyperparam_tau_national_effect_log_R0_sd = 0.1,
   hyperparam_tau_subnational_effect_log_R0_sd = 0.08,
-  
+
   tau_impute_cases_inv_mean = 0.03,
 
   # Data
