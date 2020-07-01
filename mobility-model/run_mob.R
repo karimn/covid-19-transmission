@@ -13,9 +13,11 @@ Options:
   -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
-  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0)
+  --output-dir=<dir>  Output directory for all output [default: {file.path(root_path, 'data', 'mobility', 'results')}].
+  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
+  --include-param-trend  Include parametric trend.
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
@@ -37,7 +39,7 @@ script_options <- if (interactive()) {
 
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml')
+  docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --include-param-trend --no-partial-pooling=trend')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -79,8 +81,8 @@ time_resolution <- if (is_empty(script_options$`merge-days`)) 1 else script_opti
 if (!is_null(script_options$`no-partial-pooling`)) {
   tryCatch(
     script_options$`no-partial-pooling` %<>%
-      rlang::arg_match(values = c("all", "mob", "r0")) %>%
-      factor(levels = c("all", "mob", "r0")),
+      rlang::arg_match(values = c("all", "mob", "r0", "trend")) %>%
+      factor(levels = c("all", "mob", "r0", "trend")),
 
     error = function(err) stop("Unexpected value for --no-partial-pooling")
   )
@@ -254,8 +256,8 @@ all_country_codes <- use_subnat_data %>%
   str_to_lower() %>%
   str_c(collapse = "_")
 
-save_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), ".RData"))
-save_results_file <- file.path(root_path, "data", "mobility", "results", str_c(str_glue(script_options$output), "_results.rds"))
+save_file <- file.path(script_options$`output-dir`, str_c(str_glue(script_options$output), ".RData"))
+save_results_file <- file.path(script_options$`output-dir`, str_c(str_glue(script_options$output), "_results.rds"))
 
 # Time to Death -----------------------------------------------------------
 
@@ -304,11 +306,13 @@ stan_data <- lst(
   fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
   hierarchical_R0_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "r0")),
   hierarchical_mobility_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "mob")),
+  hierarchical_trend = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "trend")),
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
+  use_parametric_trend = script_options$`include-param-trend`,
 
   # Hyperparameters
 
@@ -329,6 +333,7 @@ stan_data <- lst(
 
   start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
+  first_case_day_index = use_subnat_data$first_case_day_index,
   days_to_impute_cases = days_seeding %/% time_resolution,
   days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
@@ -413,6 +418,12 @@ make_initializer <- function(stan_data) {
       subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
       ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
+
+      trend_lambda = if (stan_data$use_parametric_trend) rbeta(N, 3, 1) else array(dim = 0),
+      toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
+      trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(abs(rnorm(stan_data$N_national, 0, 1))) else array(dim = 0),
+      trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(rnorm(N, 0, 1)) else array(dim = 0),
+      trend_kappa = rnorm(N, 0, 0.5),
     )
   }
 }
@@ -503,7 +514,7 @@ tryCatch({
   subnat_results <- mob_fit %>%
     extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
 
-  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths")
+  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend")
 
   if (!script_options$`no-predict`) {
     day_param %<>% c("deaths_rep")

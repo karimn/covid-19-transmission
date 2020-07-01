@@ -29,10 +29,13 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
     if (is.finite(first_observed_death)) {
       daily_data %>%
         mutate(
-          new_deaths = if_else(is.na(new_deaths), 0, new_deaths),
+          new_deaths = coalesce(new_deaths, 0),
           cum_deaths = if_else(is.na(cum_deaths) & date < first_observed_death, 0, cum_deaths),
-          new_deaths = if_else(is.na(new_deaths), cum_deaths - lag(cum_deaths, default = 0), new_deaths),
-          cum_deaths = if_else(is.na(cum_deaths), cumsum(new_deaths), cum_deaths),
+          new_deaths = coalesce(new_deaths, cum_deaths - lag(cum_deaths, default = 0)),
+          cum_deaths = coalesce(cum_deaths, cumsum(new_deaths)),
+
+          new_cases = coalesce(new_cases, 0),
+          cum_cases = zoo::na.locf0(cum_cases) %>% coalesce(0)
         )
     } else return(daily_data)
   }
@@ -61,6 +64,12 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
                                    ~ filter(.x, !is.na(cum_deaths) | !is.na(new_deaths)) %>%
                                      pull(date) %>%
                                      max()) %>%
+        lubridate::as_date(),
+
+      first_case_day = map_dbl(daily_data,
+                         ~ filter(.x, cum_cases > 0) %>%
+                           pull(date) %>%
+                           min()) %>%
         lubridate::as_date(),
 
       first_mob_day = map_dbl(daily_data,
@@ -102,6 +111,11 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
                     average_all_mob = (g_transit_stations + g_grocery_and_pharmacy + g_parks + g_retail_and_recreation + g_workplaces) / 5) %>%
         map(arrange, date) %>%
         map(mutate, day_index = seq(n())),
+
+      first_case_day_index = map_dbl(daily_data,
+                         ~ filter(.x, cum_cases > 0) %>%
+                           pull(day_index) %>%
+                           min()),
 
       country_index = group_indices(., country_code) # For SLURM runs on cluster server
     )
@@ -231,11 +245,12 @@ plot_day_ci <- function(results, par, use_date = FALSE) {
     geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9, group = parameter), alpha = 0.25) +
     scale_color_discrete("") +
     labs(x = "", y = "",
-         caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left") +
+         caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.
+                    Ribbons represent the 80% credible intervals.") +
+    facet_wrap(vars(sub_region), ncol = 3) + #, strip.position = "left") +
     theme(
-      strip.placement = "outside",
-      strip.text = element_text(angle = 0),
+      # strip.placement = "outside",
+      # strip.text.y.left = element_text(angle = 0),
       axis.text.x = if (!use_date) element_blank()
     )
 }
@@ -271,7 +286,7 @@ plot_post_deaths <- function(results) {
     labs(x = "", y = "New Deaths",
          caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.
                     Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), scales = "free_y") +
+    facet_wrap(vars(sub_region), scales = "free_y", ncol = 3) +
     NULL
 }
 
