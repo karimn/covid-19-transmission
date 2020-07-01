@@ -2,9 +2,10 @@
 output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
+bibliography: ../references.bib
 params:
-  results_file: lite_merged_prior.rds
-  country_code: MY 
+  results_file: lite_merged_trend.rds
+  country_code: BR 
   prior: true 
 ---
 
