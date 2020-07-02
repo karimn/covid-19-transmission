@@ -70,7 +70,7 @@ We currently use data from about 120 countries, 30 of which report COVID outcome
 
 The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
 
-For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data.
+For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data. (Note: better adjustments, which also take uncertainty into account, may be possible by using estimates from @ghisolfi_predicted_2020)
 
 
 
