@@ -93,6 +93,14 @@ if (!is_null(script_options$`no-partial-pooling`)) {
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "mob_util.R"))
 
+# Output directory --------------------------------------------------------
+
+if (!dir.exists(script_options$`output-dir`)) {
+  cat(str_glue("Creating directory {script_options$`output-dir`}\n"))
+
+  dir.create(script_options$`output-dir`)
+}
+
 # Population Data For IFR -------------------------------------------------
 
 data(pop)
@@ -434,8 +442,8 @@ make_initializer <- function(stan_data) {
 
 cat(str_glue("\nRunning model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
-  count(country_name) %$% {
-    cat(str_glue("\n\t{country_name}: {n} sub regions.\n\n"))
+  count(country_name, country_code) %$% {
+    cat(str_glue("\n\t{country_name} [{country_code}]: {n} sub regions.\n\n"))
   }
 cat("\n")
 
