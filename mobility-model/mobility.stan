@@ -297,9 +297,7 @@ transformed parameters {
 
         if (hierarchical_mobility_model && num_subnat > 1) {
           if (center_hierarchical_mobility_model) {
-            if (num_subnat > 1) {
-              beta[, curr_full_subnat_pos] = beta_subnational[, curr_subnat_pos];
-            }
+            beta[, curr_full_subnat_pos] = beta_subnational[, curr_subnat_pos];
           } else if (use_fixed_tau_beta) {
             beta[, curr_full_subnat_pos] += beta_subnational[, curr_subnat_pos] * beta_subnational_sd[1, country_index];
           } else {
@@ -401,14 +399,14 @@ model {
     original_R0 ~ normal(toplevel_R0_mean, original_R0_sd);
   }
 
-  if ((hierarchical_mobility_model && center_hierarchical_mobility_model) || (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model)) {
+  if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
+    national_log_R0 ~ normal(toplevel_log_R0, national_log_R0_sd);
+  }
+
+  /* if ((hierarchical_mobility_model && center_hierarchical_mobility_model) || (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model)) {
     int nat_pos = 1; // Different from country index; only incremented if a country has >1 subregions.
     int subnat_pos = 1;
     int days_pos = 1;
-
-    if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-      national_log_R0 ~ normal(toplevel_log_R0, national_log_R0_sd);
-    }
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
@@ -446,7 +444,7 @@ model {
 
       subnat_pos = subnat_end + 1;
     }
-  }
+  } */
 
   toplevel_trend_kappa ~ std_normal();
 
@@ -459,29 +457,62 @@ model {
     }
   }
 
-  if (fit_model) {
+  {
     // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, day_subnat_idx, overdisp_deaths);
     // target += reduce_sum(neg_binomial_partial_sum, deaths, 1, mean_deaths, overdisp_deaths);
 
+    int nat_pos = 1; // Different from country index; only incremented if a country has >1 subregions.
     int subnat_pos = 1;
+    int full_subnat_pos = 1;
     int days_pos = 1;
 
     for (country_index in 1:N_national) {
       int num_subnat = N_subnational[country_index];
-      int subnat_end = subnat_pos + num_subnat - 1;
+      int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
+      int full_subnat_end = full_subnat_pos + num_subnat - 1;
+
+      if (is_multinational && num_subnat > 1) {
+        if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
+          beta_national[, nat_pos] ~ normal(beta_toplevel, beta_national_sd);
+        }
+
+        nat_pos += 1;
+      }
 
       for (subnat_index in 1:N_subnational[country_index]) {
+        int curr_full_subnat_pos = full_subnat_pos + subnat_index - 1;
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
-        int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
+        int days_end = days_pos + days_observed[curr_full_subnat_pos] - 1;
 
-        deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
-                                                                                 overdisp_deaths);
-                                                                                 // overdisp_deaths[curr_subnat_pos]);
+        if (is_multinational && num_subnat > 1) {
+          if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
+            beta_subnational[, curr_subnat_pos] ~ normal(beta_national[, nat_pos], beta_subnational_sd[, country_index]);
+          }
+
+          if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
+            subnational_log_R0[curr_subnat_pos] ~ normal(national_log_R0[nat_pos], subnational_log_R0_sd);
+          }
+        } else {
+          if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
+            beta_subnational[, curr_subnat_pos] ~ normal(beta_toplevel, beta_subnational_sd[, country_index]);
+          }
+
+          if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
+            subnational_log_R0[curr_subnat_pos] ~ normal(toplevel_log_R0, subnational_log_R0_sd);
+          }
+        }
+
+        if (fit_model) {
+          deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
+                                                                                   overdisp_deaths);
+                                                                                   // overdisp_deaths[curr_subnat_pos]);
+        }
 
         days_pos = days_end + days_to_forecast + 1;
       }
 
       subnat_pos = subnat_end + 1;
+      full_subnat_pos = full_subnat_end + 1;
     }
   }
 }
