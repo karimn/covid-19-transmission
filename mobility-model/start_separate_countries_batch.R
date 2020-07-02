@@ -1,7 +1,7 @@
 #!/bin/Rscript
 
 "Usage:
-  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations>]
+  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations> --exponential]
 
 Options:
   --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000]
@@ -51,8 +51,9 @@ job_id <- NULL
 if (!script_options$`no-sbatch`) {
   run_type <- if (script_options$fit) "fit" else "prior"
   iter <- as.integer(script_options$iter)
+  mob_model_type <- if (script_options$exponential) "exponential" else "inv_logit"
 
-  batchcmd <- str_glue("sbatch --parsable --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter}")
+  batchcmd <- str_glue("sbatch --parsable --array={countries} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type}")
 
   cat("Running:", batchcmd, "\n")
 
