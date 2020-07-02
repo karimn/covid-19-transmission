@@ -362,6 +362,11 @@ model {
 
   beta_toplevel ~ normal(0, hyperparam_tau_beta_toplevel);
 
+  toplevel_log_R0 ~ normal(toplevel_log_R0_mean, toplevel_log_R0_sd);
+  national_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
+
+  original_R0_sd ~ normal(0, 0.5);
+
   if (hierarchical_mobility_model) {
     if (is_multinational) {
       beta_national_sd ~ normal(0, hyperparam_tau_beta_national_sd);
@@ -378,16 +383,13 @@ model {
     }
   }
 
-  toplevel_log_R0 ~ normal(toplevel_log_R0_mean, toplevel_log_R0_sd);
-  national_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
-
-  original_R0_sd ~ normal(0, 0.5);
-
   if (use_log_R0) {
     if (hierarchical_R0_model) {
       subnational_log_R0_sd ~ normal(0, hyperparam_tau_subnational_effect_log_R0_sd);
 
-      if (!center_hierarchical_R0_model) {
+      if (center_hierarchical_R0_model) {
+        original_R0 ~ normal(toplevel_R0_mean, original_R0_sd);
+      } else {
         if (is_multinational) {
           national_log_R0 ~ std_normal();
         }
@@ -395,56 +397,7 @@ model {
         subnational_log_R0 ~ std_normal();
       }
     }
-  } else {
-    original_R0 ~ normal(toplevel_R0_mean, original_R0_sd);
   }
-
-  if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-    national_log_R0 ~ normal(toplevel_log_R0, national_log_R0_sd);
-  }
-
-  /* if ((hierarchical_mobility_model && center_hierarchical_mobility_model) || (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model)) {
-    int nat_pos = 1; // Different from country index; only incremented if a country has >1 subregions.
-    int subnat_pos = 1;
-    int days_pos = 1;
-
-    for (country_index in 1:N_national) {
-      int num_subnat = N_subnational[country_index];
-      int subnat_end = subnat_pos + (num_subnat > 1 ? num_subnat : 0) - 1; // Drop the single subnational entity
-
-      if (is_multinational && num_subnat > 1) {
-        if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
-          beta_national[, nat_pos] ~ normal(beta_toplevel, beta_national_sd);
-        }
-
-        nat_pos += 1;
-      }
-
-      for (subnat_index in 1:N_subnational[country_index]) {
-        int curr_subnat_pos = subnat_pos + subnat_index - 1;
-
-        if (is_multinational && num_subnat > 1) {
-          if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
-            beta_subnational[, curr_subnat_pos] ~ normal(beta_national[, nat_pos], beta_subnational_sd[, country_index]);
-          }
-
-          if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-            subnational_log_R0[curr_subnat_pos] ~ normal(national_log_R0[nat_pos], subnational_log_R0_sd);
-          }
-        } else {
-          if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
-            beta_subnational[, curr_subnat_pos] ~ normal(beta_toplevel, beta_subnational_sd[, country_index]);
-          }
-
-          if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-            subnational_log_R0[curr_subnat_pos] ~ normal(toplevel_log_R0, subnational_log_R0_sd);
-          }
-        }
-      }
-
-      subnat_pos = subnat_end + 1;
-    }
-  } */
 
   toplevel_trend_kappa ~ std_normal();
 
@@ -475,8 +428,6 @@ model {
         if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
           beta_national[, nat_pos] ~ normal(beta_toplevel, beta_national_sd);
         }
-
-        nat_pos += 1;
       }
 
       for (subnat_index in 1:N_subnational[country_index]) {
@@ -486,11 +437,11 @@ model {
 
         if (is_multinational && num_subnat > 1) {
           if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
-            beta_subnational[, curr_subnat_pos] ~ normal(beta_national[, nat_pos], beta_subnational_sd[, country_index]);
+            beta_subnational[, curr_subnat_pos] ~ normal(beta_national[, country_index], beta_subnational_sd[, nat_pos]);
           }
 
           if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-            subnational_log_R0[curr_subnat_pos] ~ normal(national_log_R0[nat_pos], subnational_log_R0_sd);
+            subnational_log_R0[curr_subnat_pos] ~ normal(national_log_R0[country_index], subnational_log_R0_sd[nat_pos]);
           }
         } else {
           if (hierarchical_mobility_model && center_hierarchical_mobility_model) {
@@ -498,7 +449,7 @@ model {
           }
 
           if (use_log_R0 && hierarchical_R0_model && center_hierarchical_R0_model) {
-            subnational_log_R0[curr_subnat_pos] ~ normal(toplevel_log_R0, subnational_log_R0_sd);
+            subnational_log_R0[curr_subnat_pos] ~ normal(toplevel_log_R0, subnational_log_R0_sd[country_index]);
           }
         }
 
@@ -509,6 +460,10 @@ model {
         }
 
         days_pos = days_end + days_to_forecast + 1;
+      }
+
+      if (num_subnat > 1) {
+        nat_pos += 1;
       }
 
       subnat_pos = subnat_end + 1;
