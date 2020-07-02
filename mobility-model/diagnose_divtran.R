@@ -7,7 +7,7 @@ library(cowplot)
 source(file.path("util.R"))
 source(file.path("mobility-model", "mob_util.R"))
 
-load("data/mobility/results/pk_62930480_97_mob.RData")
+load("data/mobility/results/pk_63034482_97_mob.RData")
 
 check_hmc_diagnostics(mob_fit)
 
@@ -38,12 +38,13 @@ my_all_parameters <- extract_parameters(mob_fit) %>%
 
 color_scheme_set("darkgray")
 
-# mcmc_parcoord(my_posterior, np = my_np, pars = c("overdisp_deaths", "tau_impute_cases", "mean_deaths[1075]"))
 mcmc_parcoord(my_posterior, np = my_np, pars = c("overdisp_deaths", "mean_deaths[10]", # "imputed_cases[2]",
                                                  "toplevel_log_R0", "subnational_effect_log_R0_raw[1]", "subnational_effect_log_R0[1]", "subnational_effect_log_R0_sd[1]",
                                                  "beta_toplevel[1]", "beta_toplevel[2]", "beta_toplevel[3]",
                                                  "beta_subnational_raw[2,1]", "beta_subnational_sd[2,1]"),
               alpha = 0.1, np_style = parcoord_style_np(div_alpha = 1, div_size = 0.5))
+
+
 
 plot_grid(
   mcmc_parcoord(co_posterior, np = co_np, pars = c("overdisp_deaths", "tau_impute_cases", "mean_deaths[1075]"))
