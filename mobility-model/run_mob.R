@@ -17,6 +17,9 @@ Options:
   --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
+  --center-mobility-model  Use a centered hierarchical structure for mobility parameters.
+  --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
+  --center-log-r0  Use a centered hierarchical structure for log R0.
   --include-param-trend  Include parametric trend.
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
@@ -26,7 +29,6 @@ Options:
   --region=<sub-region>  Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
   --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
-  --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --no-predict  No prediction
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
@@ -313,6 +315,8 @@ stan_data <- lst(
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
   use_parametric_trend = script_options$`include-param-trend`,
+  center_hierarchical_R0_model = script_options$`center-log-r0`,
+  center_hierarchical_mobility_model = script_options$`center-mobility-model`,
 
   # Hyperparameters
 
@@ -512,7 +516,11 @@ tryCatch({
   cat("\n\n")
 
   subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
+    extract_subnat_results(c("log_R0", "imputed_cases", "ifr"))
+
+  if (!script_options$`center-log-r0`) {
+     subnat_results %<>% c("national_effect_log_R0", "subnational_effect_log_R0")
+  }
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend")
 
