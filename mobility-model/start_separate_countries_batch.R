@@ -1,7 +1,7 @@
 #!/bin/Rscript
 
 "Usage:
-  start_separate_countries_batch.R (fit | prior) [<countries> | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations> --exponential]
+  start_separate_countries_batch.R (fit | prior) [<country-code> ... | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations> --exponential]
 
 Options:
   --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000]
@@ -11,7 +11,7 @@ Options:
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "fit")
+  docopt::docopt(opt_desc, "fit it")
 } else {
   root_path <- ".."
 
@@ -25,22 +25,23 @@ script_options <- if (interactive()) {
 library(magrittr, quietly = TRUE, warn.conflicts = FALSE)
 library(tidyverse, quietly = TRUE, warn.conflicts = FALSE)
 
+script_options %<>%
+  modify_at(c("country-code"), str_to_upper)
+
 subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
 
-countries <- if (!is_empty(script_options$countries)) {
-  script_options$countries
-} else {
-  subnat_data %>%
+countries <- subnat_data %>%
     filter(has_epidemic) %>%
     semi_join(count(., country_code) %>% filter(n > 1), by = "country_code") %>% {
       if (script_options$`exclude-us`) {
         filter(., !fct_match(country_code, "US"))
+      } else if (!is_empty(script_options$`country-code`)) {
+        filter(., fct_match(country_code, script_options$`country-code`))
       } else .
     } %>%
     pull(country_index) %>%
     unique() %>%
     str_c(collapse = ",")
-}
 
 job_country_dict <- subnat_data %>%
   filter(country_index %in% as.integer(c(str_split(countries, ",", simplify = TRUE)))) %>%
