@@ -401,7 +401,7 @@ make_initializer <- function(stan_data) {
       beta_toplevel = if (stan_data$hierarchical_mobility_model) as.array(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = 0),
       beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) as.array(abs(rnorm(stan_data$num_coef, 0, 0.1))) else array(dim = c(0)),
 
-      beta_national_raw = if (is_multinational && stan_data$hierarchical_mobility_model)
+      beta_national = if (is_multinational && stan_data$hierarchical_mobility_model)
         matrix(rnorm(stan_data$num_coef * stan_data$N_national, 0, 1), nrow = stan_data$num_coef, ncol = stan_data$N_national)
       else array(dim = c(stan_data$num_coef, 0)),
 
@@ -411,7 +411,7 @@ make_initializer <- function(stan_data) {
                ncol = stan_data$N_national - num_singleton_countries)
       else array(dim = c(0, stan_data$N_national - num_singleton_countries)),
 
-      beta_subnational_raw = if (stan_data$hierarchical_mobility_model)
+      beta_subnational = if (stan_data$hierarchical_mobility_model)
         matrix(rnorm(stan_data$num_coef * (N - num_singleton_countries), 0, 1), nrow = stan_data$num_coef, ncol = N - num_singleton_countries)
       else array(dim = c(0, N - num_singleton_countries)),
 
@@ -424,10 +424,10 @@ make_initializer <- function(stan_data) {
       Rt_adj = runif(D_total, 0, 0.25),
 
       toplevel_log_R0 = rnorm(1, 0, 0.1),
-      national_effect_log_R0_raw = if (is_multinational && stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
-      national_effect_log_R0_sd = abs(rnorm(1, 0, 0.1)),
-      subnational_effect_log_R0_raw = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
-      subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
+      national_log_R0 = if (is_multinational && stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(stan_data$N_national, 0, 0.1) else array(dim = 0),
+      national_log_R0_sd = abs(rnorm(1, 0, 0.1)),
+      subnational_log_R0 = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
+      subnational_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
       ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
 
@@ -527,7 +527,7 @@ tryCatch({
     extract_subnat_results(c("log_R0", "imputed_cases", "ifr"))
 
   if (!script_options$`center-log-r0`) {
-     subnat_results %<>% c("national_effect_log_R0", "subnational_effect_log_R0")
+     subnat_results %<>% c("national_log_R0", "subnational_log_R0")
   }
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend")
