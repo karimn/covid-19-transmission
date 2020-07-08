@@ -33,6 +33,8 @@ script_options %<>%
   modify_at(c("epidemic-cutoff"), as.integer) %>%
   modify_at(c("country-code"), str_to_upper)
 
+source(file.path(root_path, "mobility-model", "mob_util.R"))
+
 subnat_data <- if (is_empty(script_options$`epidemic-cutoff`)) {
   read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
 } else {
