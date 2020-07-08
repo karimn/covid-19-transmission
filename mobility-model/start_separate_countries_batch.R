@@ -65,7 +65,7 @@ run_type <- if (script_options$fit) "fit" else "prior"
 iter <- as.integer(script_options$iter)
 mob_model_type <- if (script_options$exponential) "exponential" else "inv_logit"
 
-batchcmd <- str_glue("sbatch --parsable --array={str_c(countries$country_index, ' ')} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type}")
+batchcmd <- str_glue("sbatch --parsable --array={str_c(countries, ',')} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff}")
 
 if (!script_options$`no-sbatch`) {
 

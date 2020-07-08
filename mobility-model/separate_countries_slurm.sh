@@ -16,6 +16,6 @@ iter=$3
 output_args="-o {all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${run_suffix} --output-dir=${SCRATCH}/kremer_lab/karimn/mob_results/run_${SLURM_ARRAY_JOB_ID}"
 hierarch_args="--no-partial-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
-epi_config="--epidemic-cutoff=3"
+epi_config="--epidemic-cutoff=${5}"
 
 Rscript run_mob.R $run_type ${SLURM_ARRAY_TASK_ID} -i $iter --hyperparam=separate_hyperparam.yaml --show-script-options --include-param-trend $output_args $hierarch_args $mob_model_type $epi_config
