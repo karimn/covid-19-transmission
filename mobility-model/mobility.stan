@@ -201,6 +201,7 @@ parameters {
 
 transformed parameters {
   vector[N] log_R0 = use_log_R0 ? rep_vector(toplevel_log_R0, N) : log(original_R0);
+  vector[use_log_R0 && hierarchical_R0_model ? N_national : 0] national_log_R0;
   vector[use_log_R0 && hierarchical_R0_model ? N_national : 0] national_effect_log_R0;
   vector[use_log_R0 && hierarchical_R0_model ? N - num_singleton_countries : 0] subnational_effect_log_R0;
 
@@ -230,6 +231,7 @@ transformed parameters {
   }
 
   if (use_log_R0 && hierarchical_R0_model) {
+    national_log_R0 = rep_vector(toplevel_log_R0, N_national);
     national_effect_log_R0 = rep_vector(0, N_national);
     subnational_effect_log_R0 = rep_vector(0, N - num_singleton_countries);
   }
@@ -255,6 +257,7 @@ transformed parameters {
 
         if (use_log_R0 && hierarchical_R0_model) {
           national_effect_log_R0[country_index] = national_effect_log_R0_raw[country_index] * national_effect_log_R0_sd;
+          national_log_R0[country_index] += national_effect_log_R0[country_index];
           log_R0[full_subnat_pos:full_subnat_end] += national_effect_log_R0[country_index];
         }
       }
