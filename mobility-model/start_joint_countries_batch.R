@@ -14,12 +14,13 @@ Options:
   --exponential  Use exponential model for mobility.
   --singletons-only  Use countries with a single sub-region only.
   --exclude-countries  Exclude countries listed.
+  --top-deaths=<num-countries>  Use only the top <num-countries> in terms for number of deaths.
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit tr ie --exclude-countries --singletons-only --no-sbatch --epidemic-cutoff=3")
+  docopt::docopt(opt_desc, "fit tr ie --exclude-countries --singletons-only --no-sbatch --epidemic-cutoff=3 --top-deaths=10")
 } else {
   script_path <- setwd(root_path)
   source(file.path("renv", "activate.R"))
@@ -32,7 +33,7 @@ library(magrittr, quietly = TRUE, warn.conflicts = FALSE)
 library(tidyverse, quietly = TRUE, warn.conflicts = FALSE)
 
 script_options %<>%
-  modify_at(c("epidemic-cutoff"), as.integer) %>%
+  modify_at(c("epidemic-cutoff", "top-deaths"), as.integer) %>%
   modify_at(c("country-code"), str_to_upper)
 
 source(file.path(root_path, "mobility-model", "mob_util.R"))
@@ -51,8 +52,15 @@ countries <- subnat_data %>%
         semi_join(., count(., country_code) %>% filter(n == 1), by = "country_code")
       } else .
 
-      if (!is_empty(script_options$`country-code`) && script_options$`exclude-countries`) {
+      filtered_countries <- if (!is_empty(script_options$`country-code`) && script_options$`exclude-countries`) {
         filter(filtered_countries, !fct_match(country_code, script_options$`country-code`))
+      } else filtered_countries
+
+      if (!is_empty(script_options$`top-deaths`)) {
+        filtered_countries %>%
+          filter(row_number(-total_deaths) <= script_options$`top-deaths`)
+        arrange(filtered_countries, desc(total_deaths)) %>%
+          slice(seq_len(script_options$`top-deaths`))
       } else filtered_countries
     } %>%
   distinct(country_index, country_code, country_name)
