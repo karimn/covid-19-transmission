@@ -237,6 +237,7 @@ transformed parameters {
   }
 
   {
+    int nat_pos = 1;
     int full_subnat_pos = 1; // The "full" pointers do not exclude subnational entities in singleton countries (have only one subnational entity)
     int subnat_pos = 1;
     int days_pos = 1;
@@ -263,7 +264,7 @@ transformed parameters {
       }
 
       if (use_log_R0 && hierarchical_R0_model && num_subnat > 1) {
-        subnational_effect_log_R0[subnat_pos:subnat_end] = subnational_effect_log_R0_raw[subnat_pos:subnat_end] * subnational_effect_log_R0_sd[country_index];
+        subnational_effect_log_R0[subnat_pos:subnat_end] = subnational_effect_log_R0_raw[subnat_pos:subnat_end] * subnational_effect_log_R0_sd[nat_pos];
         log_R0[full_subnat_pos:full_subnat_end] += subnational_effect_log_R0[subnat_pos:subnat_end];
       }
 
@@ -281,9 +282,9 @@ transformed parameters {
 
         if (hierarchical_mobility_model && num_subnat > 1) {
           if (use_fixed_tau_beta) {
-            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] * beta_subnational_sd[1, country_index];
+            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] * beta_subnational_sd[1, nat_pos];
           } else {
-            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, country_index];
+            beta[, curr_full_subnat_pos] += beta_subnational_raw[, curr_subnat_pos] .* beta_subnational_sd[, nat_pos];
           }
         }
 
@@ -328,6 +329,7 @@ transformed parameters {
         days_pos = days_end + 1;
       }
 
+      nat_pos += hierarchical_mobility_model && num_subnat > 1 ? 1 : 0;
       full_subnat_pos = full_subnat_end + 1;
       subnat_pos = subnat_end + 1;
     }
