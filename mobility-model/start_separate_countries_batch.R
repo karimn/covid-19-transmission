@@ -5,13 +5,12 @@ root_path <- if (interactive()) "." else ".."
 source(file.path(root_path, "mobility-model", "constants.R"))
 
 stringr::str_glue("Usage:
-  start_separate_countries_batch.R (fit | prior) [<country-code> ... | --exclude-us] [--no-sbatch --outputname=<name> --iter=<iterations> --exponential]
+  start_separate_countries_batch.R (fit | prior) [<country-code> ... | --exclude-us] [options]
 
 Options:
   --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000].
   --outputname=<name, -o <name>  Name to use as suffix for results [default: mob].
   --no-sbatch  Dry run.
-  --exclude-us  Don't include the USA.
   --exponential  Use exponential model for mobility.
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
