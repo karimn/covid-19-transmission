@@ -117,6 +117,8 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
                            pull(day_index) %>%
                            min()),
 
+      total_deaths = map(daily_data, pull, new_deaths) %>% map(as.integer) %>% map_int(sum),
+
       country_index = group_indices(., country_code) # For SLURM runs on cluster server
     )
 
