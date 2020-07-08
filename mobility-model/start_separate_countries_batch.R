@@ -31,13 +31,16 @@ script_options %<>%
 subnat_data <- read_rds(file.path(root_path, "data", "mobility", "cleaned_subnat_data.rds"))
 
 countries <- subnat_data %>%
-    filter(has_epidemic) %>%
-    semi_join(count(., country_code) %>% filter(n > 1), by = "country_code") %>% {
-      if (script_options$`exclude-us`) {
-        filter(., !fct_match(country_code, "US"))
-      } else if (!is_empty(script_options$`country-code`)) {
+    filter(has_epidemic) %>% {
+      if (!is_empty(script_options$`country-code`)) {
         filter(., fct_match(country_code, script_options$`country-code`))
-      } else .
+      } else {
+        multi_region_countries <- semi_join(count(., country_code) %>% filter(n > 1), by = "country_code")
+
+        if (script_options$`exclude-us`) {
+          filter(multi_region_countries, !fct_match(country_code, "US"))
+        } else multi_region_countries
+      }
     } %>%
     pull(country_index) %>%
     unique() %>%
