@@ -72,7 +72,7 @@ if (!script_options$`no-sbatch`) {
 
   cat("Submitted job", job_id, "\n")
 
-  job_country_dict %<>%
+  countries %<>%
     mutate(job_id)
 } else {
   cat("Would have run:", batchcmd, "\n")
