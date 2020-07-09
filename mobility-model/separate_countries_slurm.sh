@@ -14,7 +14,7 @@ run_type=$1
 run_suffix=$2
 iter=$3
 output_args="-o {all_country_codes}_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${run_suffix} --output-dir=${SCRATCH}/kremer_lab/karimn/mob_results/run_${SLURM_ARRAY_JOB_ID}"
-hierarch_args="--no-partial-pooling=trend"
+hierarch_args="--complete-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
 epi_config="--epidemic-cutoff=${5}"
 

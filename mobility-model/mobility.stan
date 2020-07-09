@@ -22,6 +22,7 @@ functions {
 
 data {
   int<lower = 0, upper = 1> fit_model; // Fit vs prior-predict
+  int<lower = 0, upper = 1> no_pooling; // Hierarchical models forced to be non-pooling
   int<lower = 0, upper = 1> hierarchical_R0_model;
   int<lower = 0, upper = 1> hierarchical_mobility_model;
   int<lower = 0, upper = 1> hierarchical_trend;
@@ -348,16 +349,25 @@ model {
 
   if (hierarchical_mobility_model) {
     if (is_multinational) {
-      beta_national_sd ~ normal(0, hyperparam_tau_beta_national_sd);
+      if (!no_pooling) {
+        beta_national_sd ~ normal(0, hyperparam_tau_beta_national_sd);
+      }
+
       to_vector(beta_national_raw) ~ std_normal();
     }
 
-    to_vector(beta_subnational_sd) ~ normal(0, hyperparam_tau_beta_subnational_sd);
+    if (!no_pooling) {
+      to_vector(beta_subnational_sd) ~ normal(0, hyperparam_tau_beta_subnational_sd);
+    }
+
     to_vector(beta_subnational_raw) ~ std_normal();
   }
 
   toplevel_log_R0 ~ normal(toplevel_log_R0_mean, toplevel_log_R0_sd);
-  national_effect_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
+
+  if (!no_pooling) {
+    national_effect_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
+  }
 
   original_R0_sd ~ normal(0, 0.5);
 
@@ -367,7 +377,10 @@ model {
     }
 
     subnational_effect_log_R0_raw ~ std_normal();
-    subnational_effect_log_R0_sd ~ normal(0, hyperparam_tau_subnational_effect_log_R0_sd);
+
+    if (!no_pooling) {
+      subnational_effect_log_R0_sd ~ normal(0, hyperparam_tau_subnational_effect_log_R0_sd);
+    }
   } else {
     original_R0 ~ normal(toplevel_R0_mean, original_R0_sd);
   }
@@ -378,7 +391,10 @@ model {
     trend_lambda ~ beta(3, 1);
 
     if (hierarchical_trend) {
-      trend_log_kappa_effect_subnational_sd ~ std_normal();
+      if (!no_pooling) {
+        trend_log_kappa_effect_subnational_sd ~ std_normal();
+      }
+
       trend_log_kappa_effect_subnational_raw ~ std_normal();
     }
   }
