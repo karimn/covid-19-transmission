@@ -463,7 +463,7 @@ if (script_options$cmdstan) {
     iter = script_options$iter,
     chains = script_options$chains,
     control = lst(
-      adapt_delta = 0.95,
+      adapt_delta = 0.99,
       max_treedepth = 12
     ),
     init = if (script_options$`random-init`) "random" else make_initializer(stan_data),
