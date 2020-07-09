@@ -349,6 +349,8 @@ render_country_reports <- function(results,
 
 trim_iter_data <- function(results) {
   results %>%
-    mutate(param_results = map(param_results, select, -iter_data),
-           daily_data = map(daily_data, mutate, param_results = map(param_results, select, - iter_data)))
+    mutate(country_data = map(country_data,
+                              mutate,
+                              param_results = map(param_results, select, -iter_data),
+                              daily_data = map(daily_data, mutate, param_results = map(param_results, select, - iter_data))))
 }
