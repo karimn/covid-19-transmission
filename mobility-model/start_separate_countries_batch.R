@@ -17,7 +17,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit it")
+  docopt::docopt(opt_desc, "fit it --epidemic-cutoff=3")
 } else {
   script_path <- setwd(root_path)
   source(file.path("renv", "activate.R"))
@@ -66,7 +66,7 @@ run_type <- if (script_options$fit) "fit" else "prior"
 iter <- as.integer(script_options$iter)
 mob_model_type <- if (script_options$exponential) "exponential" else "inv_logit"
 
-batchcmd <- str_glue("sbatch --parsable --array={str_c(countries, collapse = ',')} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff}")
+batchcmd <- str_glue("sbatch --parsable --array={str_c(countries, collapse = ',')} separate_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff`}")
 
 if (!script_options$`no-sbatch`) {
 
