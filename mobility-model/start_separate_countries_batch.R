@@ -5,7 +5,7 @@ root_path <- if (interactive()) "." else ".."
 source(file.path(root_path, "mobility-model", "constants.R"))
 
 stringr::str_glue("Usage:
-  start_separate_countries_batch.R (fit | prior) [<country-code> ... | --exclude-us] [options]
+  start_separate_countries_batch.R (fit | prior) [<country-code> ... | --exclude-us --include-singletons] [options]
 
 Options:
   --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000].
@@ -46,7 +46,9 @@ countries <- subnat_data %>%
       if (!is_empty(script_options$`country-code`)) {
         filter(., fct_match(country_code, script_options$`country-code`))
       } else {
-        multi_region_countries <- semi_join(., count(., country_code) %>% filter(n > 1), by = "country_code")
+        multi_region_countries <- if (!script_options$`include-singletons`) {
+          semi_join(., count(., country_code) %>% filter(n > 1), by = "country_code")
+        } else .
 
         if (script_options$`exclude-us`) {
           filter(multi_region_countries, !fct_match(country_code, "US"))
