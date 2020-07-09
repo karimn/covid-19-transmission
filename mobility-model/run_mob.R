@@ -37,7 +37,7 @@ Options:
 script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit it -i 20 --hyperparam=separate_hyperparam.yaml --include-param-trend --no-partial-pooling=trend')
+  docopt::docopt(opt_desc, 'fit eg -i 20 --hyperparam=separate_hyperparam.yaml --include-param-trend --no-partial-pooling=trend')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -337,7 +337,7 @@ stan_data <- lst(
 
   start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
-  first_case_day_index = use_subnat_data$first_case_day_index,
+  first_case_day_index = as.array(use_subnat_data$first_case_day_index),
   days_to_impute_cases = days_seeding %/% time_resolution,
   days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
@@ -370,7 +370,7 @@ stan_data <- lst(
 )
 
 if (!is_null(script_options$hyperparam)) {
-  hyperparam <- yaml::yaml.load_file(script_options$hyperparam)
+  hyperparam <- yaml::yaml.load_file(file.path(root_path, "mobility-model", script_options$hyperparam))
 
   cat("\nUsing hyperparameters:\n")
   iwalk(hyperparam, ~ cat(str_c("\t", .y, " = ", .x, "\n")))
@@ -423,7 +423,7 @@ make_initializer <- function(stan_data) {
 
       ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
 
-      trend_lambda = if (stan_data$use_parametric_trend) rbeta(N, 3, 1) else array(dim = 0),
+      trend_lambda = if (stan_data$use_parametric_trend) as.array(rbeta(N, 3, 1)) else array(dim = 0),
       toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
       trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(abs(rnorm(stan_data$N_national, 0, 1))) else array(dim = 0),
       trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(rnorm(N, 0, 1)) else array(dim = 0),
