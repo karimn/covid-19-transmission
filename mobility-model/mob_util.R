@@ -279,8 +279,9 @@ plot_day_ci <- function(results, par, use_date = FALSE) {
     geom_vline(aes(xintercept = first_infection_seeding_day), linetype = "dotted", data = . %>% distinct(sub_region, first_infection_seeding_day)) +
     geom_vline(aes(xintercept = epidemic_start_date), linetype = "dotted", data = . %>% distinct(sub_region, epidemic_start_date)) +
     geom_line(aes(y = per_0.5, color = parameter), show.legend = length(par) > 1) +
-    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9, group = parameter), alpha = 0.25) +
+    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9, group = parameter, fill = parameter), alpha = 0.25) +
     scale_color_discrete("") +
+    scale_fill_discrete("") +
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.
                     Ribbons represent the 80% credible intervals.") +
@@ -308,23 +309,30 @@ plot_last_day_ci <- function(results) {
     facet_wrap(vars(country_code), ncol = 1)
 }
 
-plot_post_deaths <- function(results) {
+plot_pred_vs_obs <- function(results, pred, obs, y_axis_lab = "") {
   results %>%
     select(sub_region, daily_data, first_infection_seeding_day, epidemic_start_date) %>%
     unnest(daily_data) %>%
-    select(sub_region, day_index, date, new_deaths, param_results, first_infection_seeding_day, epidemic_start_date) %>%
+    select(sub_region, day_index, date, all_of(obs), param_results, first_infection_seeding_day, epidemic_start_date) %>%
     unnest(param_results) %>%
-    filter(fct_match(parameter, "deaths_rep")) %>%
+    filter(fct_match(parameter, pred)) %>%
     ggplot(aes(x = date)) +
     geom_vline(aes(xintercept = first_infection_seeding_day), linetype = "dotted", data = . %>% distinct(sub_region, first_infection_seeding_day)) +
     geom_vline(aes(xintercept = epidemic_start_date), linetype = "dotted", data = . %>% distinct(sub_region, epidemic_start_date)) +
-    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
-    geom_line(aes(y = new_deaths)) +
-    labs(x = "", y = "New Deaths",
+    geom_ribbon(aes(ymin = per_0.1, ymax = per_0.9), alpha = 0.15) +
+    geom_ribbon(aes(ymin = per_0.25, ymax = per_0.75), alpha = 0.25) +
+    geom_line(aes(y = per_0.5, color = "predicted median"), size = 1) +
+    geom_line(aes(y = !!sym(obs), color = "observed"), size = 1) +
+    scale_color_discrete("") +
+    labs(x = "", y = y_axis_lab,
          caption = "Solid black line: observed new deaths. Grey ribbon: posterior predicted new deaths.
                     Vertical dotted lines represent the first seeding day and the epidemic start date.") +
     facet_wrap(vars(sub_region), scales = "free_y", ncol = 3) +
     NULL
+}
+
+plot_post_deaths <- function(results) {
+  plot_pred_vs_obs(results, "deaths_rep", "new_deaths", "New Deaths")
 }
 
 render_country_reports <- function(results,
