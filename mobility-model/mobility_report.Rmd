@@ -2,11 +2,11 @@
 output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
-bibliography: ../references.bib
 params:
   results_file: lite_merged_trend.rds
   country_code: BR 
   prior: true 
+  with_cases: false
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -49,13 +49,17 @@ title: `r country_name`
 ## Data
 
 ```{r, fig.width=15}
-results %>% 
+results %>%
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_data(par = "new_deaths", use_date = TRUE, use_free_y_scale = TRUE, use_bar = TRUE)  +
   labs(title = "New Deaths") 
 ```
 
 ```{r mob-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
   labs(title = "Mobility Data") +
   NULL
@@ -73,6 +77,8 @@ Minimum Tail ESS = `r first(results$min_ess_tail)`
 
 ```{r R0-plot, fig.width=10}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_subnat_ci(par = "R0") + 
   # coord_cartesian(xlim = c(1, 4.5)) +
   labs(title = TeX("R_{0,m}"))
@@ -80,10 +86,13 @@ results %>%
 
 ```{r Rt-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_ci(par = c("Rt", "Rt_adj"), use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = TeX("R_{t,m}")) 
 ```
+
 Contact rate function: \[ cr(t; t^*, \lambda_j, \kappa) = \lambda_j + \frac{1 - \lambda_j}{1 + \exp(\kappa (t - t^*))} \]
 where 
 \begin{align*}
@@ -93,12 +102,16 @@ where
 
 ```{r param-trend, fig.height=6, fig.width=12}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_ci(par = "trend", use_date = TRUE) +
-  labs(title = TeX("Contract Rate")) 
+  labs(title = TeX("Contact Rate")) 
 ```
 
 ```{r mobility-effect-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_ci(par = "mobility_effect", use_date = TRUE) +
   geom_hline(yintercept = 1, linetype = "dotted") +
   labs(title = "Mobility effect") 
@@ -106,20 +119,27 @@ results %>%
 
 ```{r adj-factor-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_day_ci(par = "adj_factor", use_date = TRUE) +
   labs(title = TeX("S_{t,m}")) 
 ```
 
 ```{r last-Rt-plot, fig.height=4, fig.width=10}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_last_day_ci() +
   geom_vline(xintercept = 1, linetype = "dotted") +
   labs(title = TeX("$R_{t,m}$ on the last day")) 
 ```
+
 Mobility linear model: $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
 
 ```{r beta, fig.width=10}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_subnat_ci(beta = TRUE) + 
   labs(title = TeX("$\\beta$"))
 ```
@@ -127,18 +147,35 @@ results %>%
 ```{r post-deaths, fig.width=14}
 if (!params$prior) {
   results %>% 
+    select(country_code, country_data) %>% 
+    unnest(country_data) %>% 
     plot_post_deaths()
 }
 ```
 
 ```{r imputed-cases, fig.width=10}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_subnat_ci(par = "imputed_cases") + 
   labs(title = TeX("Imputed Cases"))
 ```
 
+
+```{r cases}
+if (params$with_cases) {
+  results %>% 
+    select(country_code, country_data) %>% 
+    unnest(country_data) %>% 
+    plot_pred_vs_obs("new_cases", "new_cases")
+}
+```
+
 ```{r ifr, fig.width=10}
 results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
   plot_subnat_ci(par = "ifr") + 
   labs(title = TeX("IFR"))
 ```
+
