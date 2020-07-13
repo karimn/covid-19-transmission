@@ -365,9 +365,7 @@ model {
 
   toplevel_log_R0 ~ normal(toplevel_log_R0_mean, toplevel_log_R0_sd);
 
-  if (!no_pooling) {
-    national_effect_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
-  }
+  national_effect_log_R0_sd ~ normal(0, hyperparam_tau_national_effect_log_R0_sd);
 
   original_R0_sd ~ normal(0, 0.5);
 
