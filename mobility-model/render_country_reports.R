@@ -31,6 +31,7 @@ merged_data <- read_rds(file.path(root_path, "data", "mobility", "results", scri
 merged_data %>%
   render_country_reports(file.path(root_path, "mobility-model", "mobility_report.Rmd"),
                          results_file = script_options$`merged-data-file`,
+                         fit_file = NULL,
                          script_options$`report-dir`,
                          script_options$`report-id`,
                          prior = script_options$prior)

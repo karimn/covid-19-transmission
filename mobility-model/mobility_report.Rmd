@@ -200,7 +200,7 @@ if (!is_null(params$fit_file)) {
 }
 ```
 
-```{r, include=FALSE, eval=do_diag}
+```{r diag-setup, include=FALSE, eval=do_diag}
 library(bayesplot)
 color_scheme_set("darkgray")
   
@@ -218,7 +218,7 @@ mob_np <- nuts_params(mob_fit) %>%
   filter(Iteration %in% mob_sub_iter)
 ```
 
-```{r, fig.width=10, fig.height=10}
+```{r pairs, fig.width=10, fig.height=10, eval=do_diag}
 mcmc_pairs(
   mob_posterior, np = mob_np,
   pars = c("overdisp_deaths", "mean_deaths[10]", "imputed_cases[1]",
