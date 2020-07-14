@@ -39,7 +39,7 @@ Options:
 script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --complete-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit dk --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99')
+  docopt::docopt(opt_desc, 'fit fr --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --complete-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")

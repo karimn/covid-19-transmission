@@ -4,9 +4,12 @@ header-includes:
   - \usepackage{pxfonts} 
 params:
   results_path: !r file.path("temp")
-  results_file: sa_64341429_107_mob_results.rds 
-  fit_file: sa_64341429_107_mob.RData 
-  country_code: SA 
+  results_file: se_64349420_108_mob_results.rds
+  fit_file: se_64349420_108_mob.RData
+  country_code: SE 
+  # results_file: fr_64349420_40_mob_results.rds 
+  # fit_file: fr_64349420_40_mob.RData 
+  # country_code: FR 
   prior: false 
   with_cases: true 
   singletons: false
