@@ -3,9 +3,10 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_file: test_results.rds 
-  fit_file: test.RData 
-  country_code: DK 
+  results_path: !r file.path("temp")
+  results_file: sa_64341429_107_mob_results.rds 
+  fit_file: sa_64341429_107_mob.RData 
+  country_code: SA 
   prior: false 
   with_cases: true 
   singletons: false
@@ -37,7 +38,7 @@ source(file.path("mobility-model", "mob_util.R"))
 
 
 ```{r}
-results <- read_rds(file.path("data", "mobility", "results", params$results_file))
+results <- read_rds(file.path(params$results_path, params$results_file))
 
 if (!params$singletons) {
   results %<>% 
@@ -191,6 +192,7 @@ results %>%
   plot_subnat_ci(par = "ifr") + 
   labs(title = TeX("IFR"))
 ```
+
 ```{r, results='asis'}
 if (!is_null(params$fit_file)) {
   do_diag <- TRUE
@@ -204,7 +206,7 @@ if (!is_null(params$fit_file)) {
 library(bayesplot)
 color_scheme_set("darkgray")
   
-load(file.path("data", "mobility", "results", params$fit_file))
+load(file.path(params$results_path, params$fit_file))
 
 mob_posterior <- as.array(mob_fit)
 
