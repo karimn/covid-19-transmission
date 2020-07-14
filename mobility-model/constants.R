@@ -1,4 +1,4 @@
-min_deaths_day_before_epidemic <- 10
+min_deaths_day_before_epidemic <- 3
 seeding_days_before_epidemic <- 30
 start_epidemic_offset <- seeding_days_before_epidemic + 1
 days_seeding <- 6
