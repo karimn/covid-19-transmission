@@ -13,6 +13,7 @@ Options:
   -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
+  --adapt-delta=<delta>  Stan sampling control [default: 0.8]
   --output-dir=<dir>  Output directory for all output [default: {file.path(root_path, 'data', 'mobility', 'results')}].
   --complete-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
   --no-pooling
@@ -38,7 +39,7 @@ Options:
 script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --complete-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit dk --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test')
+  docopt::docopt(opt_desc, 'fit dk --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --complete-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -61,6 +62,7 @@ library(wpp2019)
 
 script_options %<>%
   modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
+  modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
   # modify_at(c(), as.numeric)
@@ -451,7 +453,7 @@ if (script_options$cmdstan) {
     stan_data,
     cores = script_options$chains,
     chains = script_options$chains,
-    adapt_delta = 0.9,
+    adapt_delta = script_options$`adapt-delta`,
     # init = 0,
     iter_sampling = script_options$iter %/% 2,
     iter_warmup = script_options$iter %/% 2
@@ -465,7 +467,7 @@ if (script_options$cmdstan) {
     iter = script_options$iter,
     chains = script_options$chains,
     control = lst(
-      adapt_delta = 0.90,
+      adapt_delta = script_options$`adapt-delta`,
       max_treedepth = 12
     ),
     init = if (script_options$`random-init`) "random" else make_initializer(stan_data),
