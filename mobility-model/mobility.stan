@@ -98,6 +98,9 @@ transformed data {
 
   vector[D_total] trend_day_index;
 
+
+  // vector<lower = 0>[N] imputed_cases = rep_vector(100, N);
+
   {
     real gen_factor_alpha = 1 / (0.62^2);              // alpha = 1 / tau^2;
     real gen_factor_beta = gen_factor_alpha / 6.5;     // beta = 1 / (tau^2 * mu)
@@ -181,7 +184,7 @@ parameters {
   matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national - num_singleton_countries] beta_subnational_sd;
   matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
 
-  vector<lower = 0>[N] ifr_noise;
+  // vector<lower = 0>[N] ifr_noise;
 
   vector<lower = 0>[use_log_R0 ? 0 : N] original_R0;
   real<lower = 0> original_R0_sd;
@@ -218,7 +221,7 @@ transformed parameters {
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
-  vector[N] ifr = mean_ifr .* ifr_noise;
+  vector[N] ifr = mean_ifr; // .* ifr_noise;
 
   vector[use_parametric_trend ? N : 0] trend_kappa;
   vector<lower = 0, upper = 1>[D_total] trend = rep_vector(1, D_total);
@@ -340,7 +343,7 @@ transformed parameters {
 model {
   // These are not model as hierarchical over countries yet.
   overdisp_deaths ~ normal(0, 5);
-  ifr_noise ~ normal(1, 0.1);
+  // ifr_noise ~ normal(1, 0.1);
 
   tau_impute_cases ~ exponential(tau_impute_cases_inv_mean);
   imputed_cases ~ exponential(1 / tau_impute_cases);
