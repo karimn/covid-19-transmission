@@ -26,10 +26,13 @@ library(rmarkdown)
 source(file.path(root_path, "mobility-model", "constants.R"))
 source(file.path(root_path, "mobility-model", "mob_util.R"))
 
-merged_data <- read_rds(file.path(root_path, "data", "mobility", "results", script_options$`merged-data-file`))
+results_path <- file.path(root_path, "data", "mobility", "results")
+
+merged_data <- read_rds(file.path(results_path, script_options$`merged-data-file`))
 
 merged_data %>%
   render_country_reports(file.path(root_path, "mobility-model", "mobility_report.Rmd"),
+                         results_path = results_path,
                          results_file = script_options$`merged-data-file`,
                          fit_file = NULL,
                          script_options$`report-dir`,
