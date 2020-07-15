@@ -13,7 +13,7 @@ module load gcc/9.2.0-fasrc01 R_core/3.6.3-fasrc01
 run_type=$1 # fit vs prior prediction
 run_suffix=$2
 iter=$3
-output_args="-o {all_country_codes}_${SLURM_ARRAY_JOB_ID}_${run_suffix} --output-dir=${SCRATCH}/kremer_lab/karimn/mob_results/joint_runs"
+output_args="-o {all_country_codes}_${SLURM_JOB_ID}_${run_suffix} --output-dir=${SCRATCH}/kremer_lab/karimn/mob_results/joint_runs"
 hierarch_args="--complete-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
 epi_config="--epidemic-cutoff=${5}"

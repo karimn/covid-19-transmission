@@ -37,7 +37,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, 'fit pt py dk --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2')
+  docopt::docopt(opt_desc, 'fit pt py dk -i 4000 --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2 --adapt-delta=0.99')
 } else {
   setwd(root_path)
   source(file.path("renv", "activate.R"))
