@@ -37,13 +37,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --complete-pooling=all --mobility-model=~0+average_all_mob')
-  # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit fr --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99')
-  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --complete-pooling=r0")
-  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
-  # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
-  # docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
+  docopt::docopt(opt_desc, 'fit pt py dk --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2')
 } else {
   setwd(root_path)
   source(file.path("renv", "activate.R"))
@@ -65,7 +59,6 @@ script_options %<>%
   modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
-  # modify_at(c(), as.numeric)
 
 if (script_options$cmdstan) {
   library(cmdstanr)
@@ -499,23 +492,24 @@ tryCatch({
   all_parameters <- extract_parameters(mob_fit)
 
   cat("Maximum Rhat = ")
-  all_parameters %>%
+  max_rhat <- all_parameters %>%
     select(rhat) %>%
     summarize_all(max, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(max_rhat)
+
   cat("\nMinimum ESS Bulk = ")
-  all_parameters %>%
+  min_ess_bulk <- all_parameters %>%
     select(ess_bulk) %>%
     summarize_all(min, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(min_ess_bulk)
   cat("\nMinimum ESS Tail = ")
-  all_parameters %>%
+  min_ess_tail <- all_parameters %>%
     select(ess_tail) %>%
     summarize_all(min, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(min_ess_tail)
 
   cat("\n\n")
 
@@ -553,7 +547,8 @@ tryCatch({
     nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
     mutate(run_country_index = seq(n())) %>%
     left_join(nat_results, by = "run_country_index") %>%
-    select(-run_country_index)
+    select(-run_country_index) %>%
+    mutate(max_rhat, min_ess_bulk, min_ess_tail)
 
   cat("done.\n")
 
