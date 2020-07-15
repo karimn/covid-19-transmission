@@ -10,6 +10,7 @@ params:
   # results_file: se_64349420_108_mob_results.rds
   # fit_file: se_64349420_108_mob.RData
   # country_code: SE 
+  country_code: DO 
   # results_file: fr_64349420_40_mob_results.rds 
   # fit_file: fr_64349420_40_mob.RData 
   # country_code: FR 

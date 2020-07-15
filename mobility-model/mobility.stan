@@ -340,7 +340,7 @@ transformed parameters {
 model {
   // These are not model as hierarchical over countries yet.
   overdisp_deaths ~ normal(0, 5);
-  ifr_noise ~ lognormal(0, 0.05);
+  ifr_noise ~ lognormal(0, 0.025);
 
   tau_impute_cases ~ exponential(tau_impute_cases_inv_mean);
   imputed_cases ~ exponential(1 / tau_impute_cases);
