@@ -101,5 +101,5 @@ if (!script_options$`no-sbatch`) {
   cat("Would have run:\n", str_c(batchcmd, collapse = "\n "))
 }
 
-write_tsv(countries, str_c(str_c("country_dict", job_id, sep = "_"), ".tsv"))
+write_tsv(countries, "country_dict.tsv")
 
