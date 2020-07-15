@@ -89,9 +89,9 @@ batchcmd <- if (is_empty(script_options$batch)) {
 }
 
 if (!script_options$`no-sbatch`) {
-  cat("Running:", batchcmd, "\n")
+  cat("Running:\n", str_c(batchcmd, collapse = "\n "))
 
-  job_id <- map_int(batchcmd, system, intern = TRUE)
+  job_id <- map_chr(batchcmd, system, intern = TRUE)
 
   cat("Submitted job(s)", job_id, "\n")
 
