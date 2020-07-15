@@ -3,6 +3,7 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
+<<<<<<< HEAD
   results_path: data/mobility/results
   results_file: test2_results.rds 
   fit_file: test2.RData
@@ -10,6 +11,7 @@ params:
   # results_file: se_64349420_108_mob_results.rds
   # fit_file: se_64349420_108_mob.RData
   # country_code: SE 
+  country_code: DO 
   # results_file: fr_64349420_40_mob_results.rds 
   # fit_file: fr_64349420_40_mob.RData 
   # country_code: FR 
