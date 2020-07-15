@@ -67,6 +67,9 @@ countries <- subnat_data %>%
 if (!is_empty(script_options$batch)) {
   countries %<>%
     mutate(batch_index = ((seq(n()) - 1) %% script_options$batch) + 1)
+} else {
+  countries %<>%
+    mutate(batch_index = 1)
 }
 
 job_id <- NULL
@@ -79,14 +82,10 @@ batchcmd_builder <- function(country_codes) {
   str_glue("sbatch --parsable joint_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff`} {str_c(country_codes, collapse = ' ')}")
 }
 
-batchcmd <- if (is_empty(script_options$batch)) {
-  batchcmd_builder(countries$country_code)
-} else {
-  countries %>%
-    group_by(batch_index) %>%
-    group_map(~ .x$country_code) %>%
-    map_chr(batchcmd_builder)
-}
+batchcmd <- countries %>%
+  group_by(batch_index) %>%
+  group_map(~ .x$country_code) %>%
+  map_chr(batchcmd_builder)
 
 if (!script_options$`no-sbatch`) {
   cat("Running:\n", str_c(batchcmd, collapse = "\n "))
@@ -96,7 +95,9 @@ if (!script_options$`no-sbatch`) {
   cat("Submitted job(s)", job_id, "\n")
 
   countries %<>%
-    mutate(job_id)
+    group_nest(batch_index) %>%
+    mutate(job_id) %>%
+    unnest(data)
 } else {
   cat("Would have run:\n", str_c(batchcmd, collapse = "\n "))
 }
