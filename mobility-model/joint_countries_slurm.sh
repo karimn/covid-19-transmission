@@ -17,6 +17,7 @@ output_args="-o {all_country_codes}_${SLURM_JOB_ID}_${run_suffix} --output-dir=$
 hierarch_args="--complete-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
 epi_config="--epidemic-cutoff=${5}"
+stan_controls="--adapt-delta=0.99"
 
 shift 5
 countries=$@
