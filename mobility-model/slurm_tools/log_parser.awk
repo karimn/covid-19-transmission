@@ -8,6 +8,9 @@ BEGIN {
 	min_ess_bulk = "NA"
 	min_ess_tail = "NA"
 
+	num_countries = 0
+ 	num_total_subregions = 0
+
 	country = "NA"
 	country_code = "NA"
 
@@ -25,9 +28,20 @@ tolower($0) ~ /error/ {
 	run_status = "FAIL"
 }
 
+match($0, /Running model with ([[:digit:]]+) countries and ([[:digit:]])+ total subnational entities/, run_matches) {
+	num_countries = strtonum(run_matches[1])
+	num_total_subregions = strtonum(run_matches[2])
+
+	if (num_countries > 1) {
+		country = "multi"
+	}
+}
+
 match($0, /(\w[^\[]+) \[(\w+)\]: [[:digit:]]+ sub regions./, country_match) {
-	country = country_match[1] 
-	country_code = country_match[2]
+	if (num_countries == 1) {
+		country = country_match[1] 
+		country_code = country_match[2]
+	}
 }
 
 match($0, /Chain ([[:digit:]]): Iteration:[^\[]+\[\s*([[:digit:]]+)/, iter_matches) {
@@ -59,8 +73,7 @@ match($0, /Chain ([[:digit:]]): Iteration:[^\[]+\[\s*([[:digit:]]+)/, iter_match
 }
 
 END {
-	match(FILENAME, /([[:digit:]]+)_([[:digit:]]+)\.log$/, m)
+	match(FILENAME, /([[:digit:]]+)(_([[:digit:]]+))?\.log$/, m)
 
-	print m[1], "\t", m[2], "\t", country_code, "\t", divergent_trans, "\t", low_bfmi, "\t", max_rhat, "\t", min_ess_bulk, "\t", min_ess_tail, "\t", iter[1] , "\t", iter[2], "\t", iter[3], "\t", iter[4] "\t", run_status, "\t", time , "\t", country
-
+	print m[1], "\t", m[3], "\t", country_code, "\t", divergent_trans, "\t", low_bfmi, "\t", max_rhat, "\t", min_ess_bulk, "\t", min_ess_tail, "\t", iter[1] , "\t", iter[2], "\t", iter[3], "\t", iter[4] "\t", run_status, "\t", time , "\t", country 
 }
