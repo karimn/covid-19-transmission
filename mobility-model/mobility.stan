@@ -32,6 +32,7 @@ data {
   int<lower = 0, upper = 1> generate_prediction;
   int<lower = 0, upper = 1> use_transformed_param_constraints;
   int<lower = 0, upper = 1> use_parametric_trend;
+  int<lower = 0, upper = 1> use_fixed_ifr;
 
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
@@ -181,7 +182,7 @@ parameters {
   matrix<lower = 0>[hierarchical_mobility_model ? (use_fixed_tau_beta ? 1 : num_coef) : 0, N_national - num_singleton_countries] beta_subnational_sd;
   matrix[hierarchical_mobility_model ? num_coef : 0, N - num_singleton_countries] beta_subnational_raw;
 
-  vector<lower = 0>[N] ifr_noise;
+  vector<lower = 0>[use_fixed_ifr ? 0 : N] ifr_noise;
 
   vector<lower = 0>[use_log_R0 ? 0 : N] original_R0;
   real<lower = 0> original_R0_sd;
@@ -218,10 +219,14 @@ transformed parameters {
 
   vector[D_total] mobility_effect = rep_vector(1, D_total);
 
-  vector[N] ifr = mean_ifr .* ifr_noise;
+  vector[N] ifr = mean_ifr;
 
   vector[use_parametric_trend ? N : 0] trend_kappa;
   vector<lower = 0, upper = 1>[D_total] trend = rep_vector(1, D_total);
+
+  if (!use_fixed_ifr) {
+    ifr = ifr .* ifr_noise;
+  }
 
   if (use_parametric_trend) {
     if (hierarchical_trend) {
@@ -340,7 +345,10 @@ transformed parameters {
 model {
   // These are not model as hierarchical over countries yet.
   overdisp_deaths ~ normal(0, 5);
-  ifr_noise ~ lognormal(0, 0.025);
+
+  if (!use_fixed_ifr) {
+    ifr_noise ~ lognormal(0, 0.025);
+  }
 
   tau_impute_cases ~ exponential(tau_impute_cases_inv_mean);
   imputed_cases ~ exponential(1 / tau_impute_cases);

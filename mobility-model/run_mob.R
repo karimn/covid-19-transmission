@@ -30,6 +30,7 @@ Options:
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
+  --fixed-ifr  Remove noise from IFR.
   --no-predict  No prediction
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
@@ -311,6 +312,7 @@ stan_data <- lst(
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
+  use_fixed_ifr = script_options$`fixed-ifr`,
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
   use_parametric_trend = script_options$`include-param-trend`,
