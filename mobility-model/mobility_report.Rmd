@@ -66,6 +66,13 @@ if (params$multi_singletons) {
 
 ## Data
 
+```{r pop, fig.width=8}
+results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_population(at_level = if (params$multi_singletons) "country_name" else "sub_region")
+```
+
 ```{r obs-cases, fig.width=15}
 results %>%
   select(country_code, country_name, country_data) %>% 
@@ -152,7 +159,7 @@ results %>%
 
 Mobility linear model: $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\text{transit} + \beta_3 \cdot X_\text{average}$.
 
-```{r beta, fig.width=10}
+```{r beta, fig.width=10, fig.height=8}
 results %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
@@ -165,7 +172,7 @@ if (!params$prior) {
   results %>% 
     select(country_code, country_name, country_data) %>% 
     unnest(country_data) %>% 
-    plot_post_deaths()
+    plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
 }
 ```
 

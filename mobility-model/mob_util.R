@@ -235,6 +235,17 @@ plot_subnat_ci <- function(results, par, beta = FALSE) {
     facet_wrap(vars(country_name), ncol = 1, scales = "free_y")
 }
 
+plot_population <- function(results, at_level = "sub_region") {
+  at_level_sym <- sym(at_level)
+
+  results %>%
+    mutate(!!at_level_sym := fct_reorder(!!at_level_sym, population)) %>%
+    ggplot(aes(population, !!at_level_sym)) +
+    geom_col(alpha = 0.5) +
+    scale_x_continuous("", labels = scales::label_number(scale = 1/1000, suffix = "K")) +
+    labs(title = "Population", y = "")
+}
+
 plot_day_data <- function(results, par, use_date = FALSE, use_bar = FALSE, use_free_y_scale = FALSE, facet_by = "sub_region") {
   time_aes <- if (use_date) aes(x = date) else aes(x = day_index)
   y_aes <- if (length(par) > 1) aes(y = value, color = name) else aes(y = value)
@@ -260,8 +271,8 @@ plot_day_data <- function(results, par, use_date = FALSE, use_bar = FALSE, use_f
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
     facet_wrap(facet_by, ncol = 3, strip.position = "left", scales = if (use_free_y_scale) "free_y" else "fixed") +
     theme(
-      strip.placement = "outside",
-      strip.text = element_text(angle = 0),
+      # strip.placement = "outside",
+      # strip.text = element_text(angle = 0),
       axis.text.x = if (!use_date) element_blank()
     )
 }
@@ -331,8 +342,8 @@ plot_pred_vs_obs <- function(results, pred, obs, y_axis_lab = "", facet_by = "su
     NULL
 }
 
-plot_post_deaths <- function(results) {
-  plot_pred_vs_obs(results, "deaths_rep", "new_deaths", "New Deaths")
+plot_post_deaths <- function(results, facet_by = "sub_region") {
+  plot_pred_vs_obs(results, "deaths_rep", "new_deaths", "New Deaths", facet_by)
 }
 
 render_country_reports <- function(results,
