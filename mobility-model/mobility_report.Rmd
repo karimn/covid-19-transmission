@@ -7,12 +7,11 @@ params:
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
-  results_file: se_64349420_108_mob_results.rds
-  fit_file: se_64349420_108_mob.RData
-  country_code: SE
-  subnat_hier: true
+  results_file: ba_by_ec_hn_ke_ly_ni_qa_tg_ye_64439053_mob_results.rds
+  fit_file: ba_by_ec_hn_ke_ly_ni_qa_tg_ye_64439053_mob.RData
+  subnat_hier: false 
   prior: false 
-  multi_singletons: false 
+  multi_singletons: true 
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
