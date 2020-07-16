@@ -556,7 +556,8 @@ tryCatch({
     nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
     mutate(run_country_index = seq(n())) %>%
     left_join(nat_results, by = "run_country_index") %>%
-    select(-run_country_index)
+    select(-run_country_index) %>%
+    mutate(div_trans = get_num_divergent(mob_fit))
 
   if (!is_empty(script_options$`job-id`)) {
     use_subnat_data %<>%
