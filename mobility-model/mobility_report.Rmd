@@ -167,7 +167,7 @@ results %>%
   labs(title = TeX("$\\beta$"))
 ```
 
-```{r post-deaths, fig.width=14}
+```{r post-deaths, fig.width=10, fig.height=8}
 if (!params$prior) {
   results %>% 
     select(country_code, country_name, country_data) %>% 
@@ -184,10 +184,9 @@ results %>%
   labs(title = TeX("Imputed Cases"))
 ```
 
-
-```{r cases, fig.width=10}
+```{r cases, fig.width=10, fig.height=8}
 results %>% 
-  select(country_code, country_name, country_data) %>% 
+  select(country_code, country_data) %>% 
   unnest(country_data) %>% 
   plot_pred_vs_obs("new_cases", "new_cases", facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
   labs(title = "New Cases", subtitle = "predicted vs observed")

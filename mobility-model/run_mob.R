@@ -35,6 +35,7 @@ Options:
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
   --save-warmup  Save warmup part of chains?
+  --job-id=<id>  SLURM job ID to store in results.
 ") -> opt_desc
 
 script_options <- if (interactive()) {
@@ -551,6 +552,11 @@ tryCatch({
     left_join(nat_results, by = "run_country_index") %>%
     select(-run_country_index) %>%
     mutate(max_rhat, min_ess_bulk, min_ess_tail)
+
+  if (!is_empty(script_options$`job-id`)) {
+    use_subnat_data %<>%
+      mutate(job_id = script_options$`job-id`)
+  }
 
   cat("done.\n")
 
