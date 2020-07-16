@@ -235,6 +235,17 @@ plot_subnat_ci <- function(results, par, beta = FALSE) {
     facet_wrap(vars(country_code), ncol = 1, scales = "free_y")
 }
 
+plot_population <- function(results, at_level = "sub_region") {
+  at_level_sym <- sym(at_level)
+
+  results %>%
+    mutate(!!at_level_sym := fct_reorder(!!at_level_sym, population)) %>%
+    ggplot(aes(population, !!at_level_sym)) +
+    geom_col(alpha = 0.5) +
+    scale_x_continuous("", labels = scales::label_number(scale = 1/1000, suffix = "K")) +
+    labs(title = "Population", y = "")
+}
+
 plot_day_data <- function(results, par, use_date = FALSE, use_bar = FALSE, use_free_y_scale = FALSE) {
   time_aes <- if (use_date) aes(x = date) else aes(x = day_index)
   y_aes <- if (length(par) > 1) aes(y = value, color = name) else aes(y = value)
