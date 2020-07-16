@@ -427,7 +427,7 @@ make_initializer <- function(stan_data) {
       subnational_effect_log_R0_raw = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
       subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
-      ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
+      ifr_noise = if (stan_data$use_fixed_ifr) array(dim = 0) else as.array(abs(rnorm(N, 0, 0.1))),
 
       trend_lambda = if (stan_data$use_parametric_trend) as.array(rbeta(N, 3, 1)) else array(dim = 0),
       toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
