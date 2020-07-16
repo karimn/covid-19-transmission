@@ -92,7 +92,7 @@ if (!script_options$`no-sbatch`) {
 
   job_id <- map_chr(batchcmd, system, intern = TRUE)
 
-  cat("Submitted job(s)", job_id, "\n")
+  cat("\nSubmitted job(s):\n", job_id, "\n")
 
   countries %<>%
     group_nest(batch_index) %>%
