@@ -3,19 +3,16 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_path: data/mobility/results
-  results_file: test2_results.rds 
-  fit_file: test2.RData
-  # results_path: !r file.path("temp")
-  # results_file: se_64349420_108_mob_results.rds
-  # fit_file: se_64349420_108_mob.RData
-  # country_code: SE 
-  country_code: DO 
-  # results_file: fr_64349420_40_mob_results.rds 
-  # fit_file: fr_64349420_40_mob.RData 
-  # country_code: FR 
+  results_path: temp 
+  # results_file: fr_64426766_41_mob_results.rds 
+  # fit_file: fr_64426766_41_mob.RData
+  # country_code: FR
+  results_file: se_64349420_108_mob_results.rds
+  fit_file: se_64349420_108_mob.RData
+  country_code: SE
+  subnat_hier: true
   prior: false 
-  multi_singletons: true 
+  multi_singletons: false 
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -215,7 +212,7 @@ load(file.path(params$results_path, params$fit_file))
 
 mob_posterior <- as.array(mob_fit)
 
-mob_sub_iter <- sample(nrow(mob_posterior), 500) # Shrink it a little
+mob_sub_iter <- sample(nrow(mob_posterior), 200) # Shrink it a little
 
 mob_posterior %<>% magrittr::extract(mob_sub_iter, ,)
 
@@ -225,25 +222,39 @@ mob_np <- nuts_params(mob_fit) %>%
   filter(Iteration %in% mob_sub_iter)
 ```
 
-```{r pairs, fig.width=10, fig.height=10, eval=do_diag}
+```{r pairs, fig.width=14, fig.height=10, eval=do_diag}
+pairs_pars <- c(
+  "overdisp_deaths", "mean_deaths[10]", "imputed_cases[1]",
+  "toplevel_log_R0", 
+  "beta_toplevel[2]", 
+  "ifr_noise[1]",
+  "trend_lambda[1]", "toplevel_trend_kappa"
+)
+
+pairs_trans <- lst(
+  overdisp_deaths = "log",
+  "mean_deaths[10]" = "log",
+  "imputed_cases[1]" = "log",
+  "trend_lambda[1]" = "log", "toplevel_trend_kappa" = function(kappa) log(-kappa),
+  "ifr_noise[1]" = "log"
+)
+
+if (params$subnat_hier && !params$multi_singletons) {
+  pairs_pars %<>% c(
+    "subnational_effect_log_R0_raw[1]", "subnational_effect_log_R0_sd[1]",
+    "beta_subnational_raw[2,1]", "beta_subnational_sd[2,1]"
+  ) 
+  
+  pairs_trans %<>% list_modify(
+    "subnational_effect_log_R0_sd[1]" = "log",
+    "beta_subnational_sd[2,1]" = "log"
+  )
+}
+
 mcmc_pairs(
   mob_posterior, np = mob_np,
-  pars = c("overdisp_deaths", "mean_deaths[10]", "imputed_cases[1]",
-           # "toplevel_log_R0", "subnational_log_R0[1]", "subnational_log_R0_sd[1]",
-           # "beta_toplevel[2]", "beta_subnational[2,1]", "beta_subnational_sd[2,1]",
-           "toplevel_log_R0", #"subnational_effect_log_R0_raw[1]", "subnational_effect_log_R0_sd[1]",
-           "beta_toplevel[2]", #"beta_subnational_raw[2,1]", "beta_subnational_sd[2,1]",
-           "ifr_noise[1]",
-           "trend_lambda[1]", "toplevel_trend_kappa"
-           ),
-  transformations = lst(overdisp_deaths = "log",
-                        "mean_deaths[10]" = "log",
-                        # "subnational_log_R0_sd[1]" = "log",
-                        # "subnational_effect_log_R0_sd[1]" = "log",
-                        # "beta_subnational_sd[2,1]" = "log",
-                        "imputed_cases[1]" = "log",
-                        "trend_lambda[1]" = "log", "toplevel_trend_kappa" = function(kappa) log(-kappa),
-                        "ifr_noise[1]" = "log"),
+  pars = pairs_pars,
+  transformations = pairs_trans,
   off_diag_args = list(size = 0.75)
   # np_style = pairs_style_np(div_size = 2, div_shape = 16, td_alpha = 0.1)
 )
