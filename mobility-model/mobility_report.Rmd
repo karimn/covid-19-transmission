@@ -11,8 +11,7 @@ params:
   # fit_file: fr_64349420_40_mob.RData 
   # country_code: FR 
   prior: false 
-  with_cases: true 
-  singletons: false
+  singletons: false 
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -64,7 +63,12 @@ if (params$singletons) {
 
 ## Data
 
-
+```{r pop, fig.width=8}
+results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_population(at_level = if (params$singletons) "country_name" else "sub_region")
+```
 
 ```{r obs-cases, fig.width=15, fig.height=8}
 results %>%
