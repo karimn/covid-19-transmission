@@ -64,7 +64,9 @@ if (params$singletons) {
 
 ## Data
 
-```{r obs-cases, fig.width=15}
+
+
+```{r obs-cases, fig.width=15, fig.height=8}
 results %>%
   select(country_code, country_data) %>% 
   unnest(country_data) %>% 
@@ -72,7 +74,7 @@ results %>%
   labs(title = "New Cases") 
 ```
 
-```{r obs-deaths, fig.width=15}
+```{r obs-deaths, fig.width=15, fig.height=8}
 results %>%
   select(country_code, country_data) %>% 
   unnest(country_data) %>% 
@@ -80,7 +82,7 @@ results %>%
   labs(title = "New Deaths") 
 ```
 
-```{r mob-plot, fig.height=6, fig.width=12}
+```{r mob-plot, fig.height=8, fig.width=12}
 results %>% 
   select(country_code, country_data) %>% 
   unnest(country_data) %>% 
