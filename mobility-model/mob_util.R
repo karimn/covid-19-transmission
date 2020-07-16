@@ -258,10 +258,11 @@ plot_day_data <- function(results, par, use_date = FALSE, use_bar = FALSE, use_f
     scale_color_discrete("") +
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.") +
-    facet_wrap(vars(sub_region), ncol = 3, strip.position = "left", scales = if (use_free_y_scale) "free_y" else "fixed") +
+    # facet_wrap(vars(sub_region), ncol = 3, strip.position = "left", scales = if (use_free_y_scale) "free_y" else "fixed") +
+    facet_wrap(vars(sub_region), ncol = 3, scales = if (use_free_y_scale) "free_y" else "fixed") +
     theme(
-      strip.placement = "outside",
-      strip.text = element_text(angle = 0),
+      # strip.placement = "outside",
+      # strip.text = element_text(angle = 0),
       axis.text.x = if (!use_date) element_blank()
     )
 }
