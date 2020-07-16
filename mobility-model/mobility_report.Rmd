@@ -183,13 +183,11 @@ results %>%
 
 
 ```{r cases}
-if (params$with_cases) {
-  results %>% 
-    select(country_code, country_data) %>% 
-    unnest(country_data) %>% 
-    plot_pred_vs_obs("new_cases", "new_cases") +
-    labs(title = "New Cases", subtitle = "predicted vs observed")
-}
+results %>% 
+  select(country_code, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_pred_vs_obs("new_cases", "new_cases") +
+  labs(title = "New Cases", subtitle = "predicted vs observed")
 ```
 
 ```{r ifr, fig.width=10}
