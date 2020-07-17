@@ -65,8 +65,10 @@ countries <- subnat_data %>%
   distinct(country_index, country_code, country_name)
 
 if (!is_empty(script_options$batch)) {
+  num_batches <- ceiling(nrow(countries) / script_options$batch)
+
   countries %<>%
-    mutate(batch_index = ((seq(n()) - 1) %% script_options$batch) + 1)
+    mutate(batch_index = ((seq(n()) - 1) %% num_batches) + 1)
 } else {
   countries %<>%
     mutate(batch_index = 1)
