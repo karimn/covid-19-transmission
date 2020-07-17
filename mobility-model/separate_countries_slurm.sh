@@ -18,5 +18,6 @@ hierarch_args="--complete-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
 epi_config="--epidemic-cutoff=${5}"
 stan_controls="--adapt-delta=0.99"
+temp_opt="--fixed-ifr --first-case-day=2020-03-10"
 
-Rscript run_mob.R $run_type ${SLURM_ARRAY_TASK_ID} -i $iter --hyperparam=separate_hyperparam.yaml --show-script-options --include-param-trend $output_args $hierarch_args $mob_model_type $epi_config $stan_controls --fixed-ifr
+Rscript run_mob.R $run_type ${SLURM_ARRAY_TASK_ID} -i $iter --hyperparam=separate_hyperparam.yaml --job-id=${SLURM_ARRAY_JOB_ID} --show-script-options --include-param-trend $output_args $hierarch_args $mob_model_type $epi_config $stan_controls $temp_opt

@@ -23,6 +23,7 @@ Options:
   --hyperparam=<hyperparam-file>  Use YAML file to specify hyperparameter values
   --merge-days=<num-days>  Number of days to merge together.
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
+  --first-case-day=<day>  Specify day to use for first case day in format YYYY-MM-DD
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
   --region=<sub-region>  Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
@@ -35,12 +36,13 @@ Options:
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
   --save-warmup  Save warmup part of chains?
+  --job-id=<id>  SLURM job ID to store in results.
 ") -> opt_desc
 
 script_options <- if (interactive()) {
   # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --complete-pooling=all --mobility-model=~0+average_all_mob')
   # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit fr --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99')
+  docopt::docopt(opt_desc, 'fit fr --hyperparam=test_hyperparam.yaml --include-param-trend --complete-pooling=trend --no-pooling --epidemic-cutoff=3 -o test --adapt-delta=0.99 --first-case-day=2020-03-10')
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --complete-pooling=r0")
   # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
   # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
@@ -65,8 +67,8 @@ script_options %<>%
   modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
   modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
-  modify_at("country-code", str_to_upper)
-  # modify_at(c(), as.numeric)
+  modify_at("country-code", str_to_upper) %>%
+  modify_at("first-case-day", ~ if (!is_null(.x)) lubridate::as_date(.x))
 
 if (script_options$cmdstan) {
   library(cmdstanr)
@@ -343,7 +345,12 @@ stan_data <- lst(
 
   start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
-  first_case_day_index = as.array(use_subnat_data$first_case_day_index),
+  first_case_day_index = if (is_null(script_options$`first-case-day`)) {
+    as.array(use_subnat_data$first_case_day_index)
+  } else {
+    map(use_subnat_data$daily_data, filter, date == script_options$`first-case-day`) %>%
+      map_int(pull, day_index)
+  },
   days_to_impute_cases = days_seeding %/% time_resolution,
   days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
@@ -556,6 +563,11 @@ tryCatch({
     mutate(run_country_index = seq(n())) %>%
     left_join(nat_results, by = "run_country_index") %>%
     select(-run_country_index)
+
+  if (!is_empty(script_options$`job-id`)) {
+    use_subnat_data %<>%
+      mutate(job_id = script_options$`job-id`)
+  }
 
   cat("done.\n")
 
