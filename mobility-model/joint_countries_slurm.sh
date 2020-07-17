@@ -22,4 +22,4 @@ stan_controls="--adapt-delta=0.99"
 shift 5
 countries=$@
 
-Rscript run_mob.R $run_type $countries -i $iter --hyperparam=joint_hyperparam.yaml --job-id=${SLURM_JOB_ID} --show-script-options --include-param-trend $output_args $hierarch_args $mob_model_type $epi_config $stan_controls --fixed-ifr
+Rscript run_mob.R $run_type $countries -i $iter --hyperparam=joint_hyperparam.yaml --job-id=${SLURM_JOB_ID} --show-script-options --include-param-trend $output_args $hierarch_args $mob_model_type $epi_config $stan_controls
