@@ -5,7 +5,7 @@ root_path <- if (interactive()) "." else ".."
 source(file.path(root_path, "mobility-model", "constants.R"))
 
 stringr::str_glue("Usage:
-  start_joint_countries_batch.R (fit | prior) [<country-code> ...] [options]
+  start_joint_countries_batch.R (fit | prior) [<country-code> ...] [options] [--top-deaths=<num-countries> | --batch=<batch-size>]
 
 Options:
   --iter=<iterations>, -i <iterations>  Total number of iterations [default: 2000].
@@ -15,12 +15,13 @@ Options:
   --singletons-only  Use countries with a single sub-region only.
   --exclude-countries  Exclude countries listed.
   --top-deaths=<num-countries>  Use only the top <num-countries> in terms for number of deaths.
+  --batch=<batch-size>  Group countries in batched runs.
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, "fit tr ie --exclude-countries --singletons-only --no-sbatch --epidemic-cutoff=3 --top-deaths=10")
+  docopt::docopt(opt_desc, "fit --singletons-only --no-sbatch --batch=10")
 } else {
   script_path <- setwd(root_path)
   source(file.path("renv", "activate.R"))
@@ -33,7 +34,7 @@ library(magrittr, quietly = TRUE, warn.conflicts = FALSE)
 library(tidyverse, quietly = TRUE, warn.conflicts = FALSE)
 
 script_options %<>%
-  modify_at(c("epidemic-cutoff", "top-deaths"), as.integer) %>%
+  modify_at(c("epidemic-cutoff", "top-deaths", "batch"), as.integer) %>%
   modify_at(c("country-code"), str_to_upper)
 
 source(file.path(root_path, "mobility-model", "mob_util.R"))
@@ -59,11 +60,19 @@ countries <- subnat_data %>%
       if (!is_empty(script_options$`top-deaths`)) {
         filtered_countries %>%
           filter(row_number(-total_deaths) <= script_options$`top-deaths`)
-        arrange(filtered_countries, desc(total_deaths)) %>%
-          slice(seq_len(script_options$`top-deaths`))
       } else filtered_countries
     } %>%
   distinct(country_index, country_code, country_name)
+
+if (!is_empty(script_options$batch)) {
+  num_batches <- ceiling(nrow(countries) / script_options$batch)
+
+  countries %<>%
+    mutate(batch_index = ((seq(n()) - 1) %% num_batches) + 1)
+} else {
+  countries %<>%
+    mutate(batch_index = 1)
+}
 
 job_id <- NULL
 
@@ -71,20 +80,29 @@ run_type <- if (script_options$fit) "fit" else "prior"
 iter <- as.integer(script_options$iter)
 mob_model_type <- if (script_options$exponential) "exponential" else "inv_logit"
 
-batchcmd <- str_glue("sbatch --parsable joint_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff`} {str_c(countries$country_code, collapse = ' ')}")
-
-if (!script_options$`no-sbatch`) {
-  cat("Running:", batchcmd, "\n")
-
-  job_id <- system(batchcmd, intern = TRUE)
-
-  cat("Submitted job", job_id, "\n")
-
-  countries %<>%
-    mutate(job_id)
-} else {
-  cat("Would have run:", batchcmd, "\n")
+batchcmd_builder <- function(country_codes) {
+  str_glue("sbatch --parsable joint_countries_slurm.sh {run_type} {script_options$outputname} {iter} {mob_model_type} {script_options$`epidemic-cutoff`} {str_c(country_codes, collapse = ' ')}")
 }
 
-write_tsv(countries, str_c(str_c("country_dict", job_id, sep = "_"), ".tsv"))
+batchcmd <- countries %>%
+  group_by(batch_index) %>%
+  group_map(~ .x$country_code) %>%
+  map_chr(batchcmd_builder)
+
+if (!script_options$`no-sbatch`) {
+  cat("Running:\n", str_c(batchcmd, collapse = "\n "))
+
+  job_id <- map_chr(batchcmd, system, intern = TRUE)
+
+  cat("\nSubmitted job(s):\n", job_id, "\n")
+
+  countries %<>%
+    group_nest(batch_index) %>%
+    mutate(job_id) %>%
+    unnest(data)
+} else {
+  cat("Would have run:\n", str_c(batchcmd, collapse = "\n "))
+}
+
+write_tsv(countries, "country_dict.tsv")
 
