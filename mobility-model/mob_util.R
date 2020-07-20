@@ -215,8 +215,10 @@ extract_beta <- function(fit) {
 
 }
 
-plot_subnat_ci <- function(results, par, beta = FALSE) {
-  results %>% {
+plot_subnat_ci <- function(results, par, beta = FALSE, violin_density = FALSE) {
+  dodge_width <- if (violin_density) 1 else 0.5
+
+  plot_obj <- results %>% {
     if (beta) {
       unnest(., beta_results) %>%
         mutate(parameter = str_c("$\\beta_", coef_index, "$"))
@@ -226,13 +228,23 @@ plot_subnat_ci <- function(results, par, beta = FALSE) {
     }
   } %>%
     mutate(sub_region = fct_reorder(sub_region, per_0.5) %>% fct_explicit_na(na_level = "")) %>%
-    ggplot(aes(y = sub_region)) +
+    ggplot(aes(y = sub_region))
+
+  if (violin_density) {
+    plot_obj <- plot_obj + geom_violin(aes(x = iter_value, group = parameter),
+                                       position = position_dodge(width = dodge_width),
+                                       data = . %>% unnest(iter_data))
+  }
+
+  plot_obj <- plot_obj +
     geom_pointrange(aes(x = per_0.5, xmin = per_0.1, xmax = per_0.9, color = parameter),
-                    fatten = 1.5, position = position_dodge(width = 0.5), show.legend = beta || length(par) > 1) +
-    geom_point(aes(x = mean, color = parameter), size = 1.5, shape = 5, position = position_dodge(width = 0.5), show.legend = beta || length(par) > 1) +
+                    fatten = 1.5, position = position_dodge(width = dodge_width), show.legend = beta || length(par) > 1) +
+    geom_point(aes(x = mean, color = parameter), size = 1.5, shape = 5, position = position_dodge(width = dodge_width), show.legend = beta || length(par) > 1) +
     scale_color_discrete("", labels = if (beta) TeX else waiver()) +
     labs(x = "", y = "") +
-    facet_wrap(vars(country_name), ncol = 1, scales = "free_y")
+    facet_wrap(vars(country_name), ncol = 2, scales = "free_y")
+
+  return(plot_obj)
 }
 
 plot_population <- function(results, at_level = "sub_region") {

@@ -3,14 +3,14 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_path: temp 
+  results_path: data/mobility/results 
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
-  results_file: multi_64630459_mob_results.rds
-  fit_file: multi_64630459_mob.RData
+  results_file: test_results.rds
+  fit_file: test.RData
+  prior_results_file: test_prior_results.rds
   subnat_hier: false 
-  prior: false 
   multi_singletons: true 
 ---
 
@@ -38,7 +38,6 @@ knitr::opts_chunk$set(echo = FALSE)
 source(file.path("mobility-model", "mob_util.R"))
 ```
 
-
 ```{r}
 results <- read_rds(file.path(params$results_path, params$results_file))
 
@@ -63,8 +62,7 @@ if (params$multi_singletons) {
 }
 ```
 
-
-## Data
+# Data
 
 ```{r pop, fig.width=8}
 results %>% 
@@ -98,7 +96,8 @@ results %>%
   NULL
 ```
 
-## Analysis
+
+# Analysis
 
 Number of divergent transitions = `r first(results$divergent_trans)`
 
@@ -168,12 +167,10 @@ results %>%
 ```
 
 ```{r post-deaths, fig.width=10, fig.height=8}
-if (!params$prior) {
-  results %>% 
-    select(country_code, country_name, country_data) %>% 
-    unnest(country_data) %>% 
-    plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
-}
+results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
 ```
 
 ```{r imputed-cases, fig.width=10}
@@ -200,12 +197,109 @@ results %>%
   labs(title = TeX("IFR"))
 ```
 
+# Prior Prediction
+
+```{r}
+if (!is_null(params$prior_results_file)) {
+  do_prior_predict <- TRUE
+} else {
+  do_prior_predict <- FALSE
+  cat("Not Available.")
+}
+```
+
+```{r prior-predict-setup, include=FALSE, eval=do_prior_predict}
+prior_results <- read_rds(file.path(params$results_path, params$prior_results_file))
+```
+
+```{r prior-R0-plot, fig.width=10, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_subnat_ci(par = "R0", violin_density = TRUE) + 
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r prior-Rt-plot, fig.height=6, fig.width=12, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_day_ci(par = c("Rt", "Rt_adj"), use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r prior-param-trend, fig.height=6, fig.width=12, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_day_ci(par = "trend", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
+  labs(title = TeX("Contact Rate")) 
+```
+```{r prior-mobility-effect-plot, fig.height=6, fig.width=12, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_day_ci(par = "mobility_effect", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = "Mobility effect") 
+```
+```{r prior-adj-factor-plot, fig.height=6, fig.width=12, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_day_ci(par = "adj_factor", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
+  labs(title = TeX("S_{t,m}")) 
+```
+
+```{r prior-beta, fig.width=10, fig.height=8, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_subnat_ci(beta = TRUE, violin_density = TRUE) + 
+  labs(title = TeX("$\\beta$"))
+```
+
+```{r prior-deaths, fig.width=10, fig.height=8, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
+```
+
+```{r prior-imputed-cases, fig.width=10, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_subnat_ci(par = "imputed_cases", violin_density = TRUE) + 
+  labs(title = TeX("Imputed Cases")) +
+  coord_cartesian(xlim = c(0, 100))
+```
+
+```{r prior-cases, fig.width=10, fig.height=8, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_pred_vs_obs("new_cases", "new_cases", facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
+  labs(title = "New Cases", subtitle = "predicted vs observed")
+```
+
+```{r prior-ifr, fig.width=10, eval=do_prior_predict}
+prior_results %>% 
+  select(country_code, country_name, country_data) %>% 
+  unnest(country_data) %>% 
+  plot_subnat_ci(par = "ifr") + 
+  labs(title = TeX("IFR"))
+```
+
+# Diagnostics
+
 ```{r, results='asis'}
 if (!is_null(params$fit_file)) {
   do_diag <- TRUE
-  cat("\n# Diagnostics\n")
 } else {
   do_diag <- FALSE
+  cat("Not Available.")
 }
 ```
 
