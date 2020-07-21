@@ -196,7 +196,7 @@ parameters {
   // Parametric Trend
 
   vector<lower = 0, upper = 1>[use_parametric_trend ? N : 0] trend_lambda;
-  real<upper = 0> toplevel_trend_kappa;
+  real<lower = 0> toplevel_trend_kappa;
   vector[use_parametric_trend && hierarchical_trend ? N_national : 0] trend_log_kappa_effect_subnational_sd;
   vector[use_parametric_trend && hierarchical_trend ? N : 0] trend_log_kappa_effect_subnational_raw;
 }
@@ -221,7 +221,7 @@ transformed parameters {
 
   vector[N] ifr = mean_ifr;
 
-  vector[use_parametric_trend ? N : 0] trend_kappa;
+  vector<upper = 0>[use_parametric_trend ? N : 0] trend_kappa;
   vector<lower = 0, upper = 1>[D_total] trend = rep_vector(1, D_total);
 
   if (!use_fixed_ifr) {
@@ -230,9 +230,9 @@ transformed parameters {
 
   if (use_parametric_trend) {
     if (hierarchical_trend) {
-      trend_kappa = toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
+      trend_kappa = - toplevel_trend_kappa + log(trend_log_kappa_effect_subnational_raw .* trend_log_kappa_effect_subnational_sd[subnat_national_id]);
     } else {
-      trend_kappa = rep_vector(toplevel_trend_kappa, N);
+      trend_kappa = rep_vector(- toplevel_trend_kappa, N);
     }
   }
 
