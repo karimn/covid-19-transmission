@@ -392,7 +392,7 @@ model {
   }
 
   // toplevel_trend_kappa ~ std_normal();
-  toplevel_trend_kappa ~ gamma(2, 1/2);
+  toplevel_trend_kappa ~ gamma(2, 1.0/2.0);
 
   if (use_parametric_trend) {
     trend_lambda ~ beta(3, 1);
