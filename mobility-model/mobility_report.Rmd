@@ -7,8 +7,8 @@ params:
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
-  results_file: multi_64630459_mob_results.rds
-  fit_file: multi_64630459_mob.RData
+  results_file: multi_64658355_mob_results.rds
+  fit_file: multi_64658355_mob.RData
   subnat_hier: false 
   prior: false 
   multi_singletons: true 
