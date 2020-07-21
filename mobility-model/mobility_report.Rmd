@@ -7,8 +7,8 @@ params:
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
-  results_file: ba_by_ec_hn_ke_ly_ni_qa_tg_ye_64439053_mob_results.rds
-  fit_file: ba_by_ec_hn_ke_ly_ni_qa_tg_ye_64439053_mob.RData
+  results_file: multi_64630459_mob_results.rds
+  fit_file: multi_64630459_mob.RData
   subnat_hier: false 
   prior: false 
   multi_singletons: true 
@@ -186,7 +186,7 @@ results %>%
 
 ```{r cases, fig.width=10, fig.height=8}
 results %>% 
-  select(country_code, country_data) %>% 
+  select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_pred_vs_obs("new_cases", "new_cases", facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
   labs(title = "New Cases", subtitle = "predicted vs observed")
