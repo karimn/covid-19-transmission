@@ -3,12 +3,13 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_path: data/mobility/results 
+  results_path: temp 
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
   results_file: multi_64658355_mob_results.rds
   fit_file: multi_64658355_mob.RData
+  prior_fit_file: multi_64885383_prior.RData 
   subnat_hier: false 
   multi_singletons: true 
 ---
@@ -356,5 +357,12 @@ mcmc_pairs(
   off_diag_args = list(size = 0.75)
   # np_style = pairs_style_np(div_size = 2, div_shape = 16, td_alpha = 0.1)
 )
+```
+
+```{r hypers, fig.width=8, eval=do_diag}
+mcmc_areas(mob_posterior, 
+           regex_pars = c("overdisp_deaths", "beta_toplevel", "beta_national_sd", "toplevel_log_R0", "national_effect_log_R0_sd"), 
+           transformations = lst("toplevel_log_R0" = "exp"),
+           prob = 0.8) + ggtitle("Posterior distribution of parameters")
 ```
 
