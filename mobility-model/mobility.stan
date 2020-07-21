@@ -391,7 +391,8 @@ model {
     original_R0 ~ normal(toplevel_R0_mean, original_R0_sd);
   }
 
-  toplevel_trend_kappa ~ std_normal();
+  // toplevel_trend_kappa ~ std_normal();
+  toplevel_trend_kappa ~ gamma(2, 1/2);
 
   if (use_parametric_trend) {
     trend_lambda ~ beta(3, 1);
