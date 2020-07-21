@@ -13,8 +13,10 @@ Options:
   -i <iterations>, --iter=<iterations>  Total number of iterations [default: 2000]
   -w <iterations>, --warmup=<iterations>  Number of warmup iteration. By default this would be half the total number of iterations.
   -o <output-name>, --output=<output-name>  Output name to use in file names [default: mob]
+  --adapt-delta=<delta>  Stan sampling control [default: 0.8]
   --output-dir=<dir>  Output directory for all output [default: {file.path(root_path, 'data', 'mobility', 'results')}].
-  --no-partial-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
+  --complete-pooling=<which-parts>  Do not use a hierarchical model (parts: all,mob,r0,trend)
+  --no-pooling
   --mobility-model-type=<model-type>  Type of mobility model (one of: inv_logit, exponential) [default: inv_logit]
   --mobility-model=<model-formula>  Linear mobility model. Makes sure there are no spaces. Don't forget to remove the intercept from the formula.
   --include-param-trend  Include parametric trend.
@@ -23,27 +25,22 @@ Options:
   --cmdstan  Use {{cmdstanr}} instead of {{rstan}}
   --epidemic-cutoff=<num-deaths>  Number of cumulative deaths that defines the start of an epidemic [default: {min_deaths_day_before_epidemic}]
   --countries-as-subregions  Treat all countries as subregions in a single country \"world\".
+  --region=<sub-region>  Key name used for selecting a single region in a country, e.g. SE_110 in Sweden.
+  --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
   --raw-data-file=<raw file>  Path to raw data [default: {file.path(root_path, 'data', 'mergecleaned.csv')}]
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
+  --fixed-ifr  Remove noise from IFR.
   --no-predict  No prediction
-  --rand-sample-subnat=<sample-size>  Instead of running all of subnational units, run with a random sample. Only allowed with one country.
+  --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
+  --save-warmup  Save warmup part of chains?
+  --job-id=<id>  SLURM job ID to store in results.
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  root_path <- "."
-
-  # docopt::docopt(opt_desc, 'fit ar au ca pt pl -i 1000 -o ar_au_ca_pt_pl_mob_all_pooling --no-partial-pooling=all --mobility-model=~0+average_all_mob')
-  # docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --mobility-model=~0+g_residential')
-  docopt::docopt(opt_desc, 'fit my -i 2000 --hyperparam=separate_hyperparam.yaml --include-param-trend --no-partial-pooling=trend')
-  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 2000 -o ar_au_ca_pt_pl_mob_r0_pooling --no-partial-pooling=r0")
-  # docopt::docopt(opt_desc, "fit ar au ca pt pl -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml")
-  # docopt::docopt(opt_desc, "fit 1 3 -i 1000 --hyperparam=mobility-model/test_hyperparam.yaml -o test_{all_country_codes} --epidemic-cutoff=3")
-  # docopt::docopt(opt_desc, "fit BE TR RU EC IE ID RO CL PH EG -o national_only -i 1000 --countries-as-subregions")
+  docopt::docopt(opt_desc, 'fit pt py dk -i 4000 --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2 --adapt-delta=0.99')
 } else {
-  root_path <- ".."
-
   setwd(root_path)
   source(file.path("renv", "activate.R"))
   setwd("mobility-model")
@@ -61,9 +58,9 @@ library(wpp2019)
 
 script_options %<>%
   modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
+  modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
-  # modify_at(c(), as.numeric)
 
 if (script_options$cmdstan) {
   library(cmdstanr)
@@ -75,18 +72,26 @@ if (script_options$cmdstan) {
 
 time_resolution <- if (is_empty(script_options$`merge-days`)) 1 else script_options$`merge-days`
 
-if (!is_null(script_options$`no-partial-pooling`)) {
+if (!is_null(script_options$`complete-pooling`)) {
   tryCatch(
-    script_options$`no-partial-pooling` %<>%
+    script_options$`complete-pooling` %<>%
       rlang::arg_match(values = c("all", "mob", "r0", "trend")) %>%
       factor(levels = c("all", "mob", "r0", "trend")),
 
-    error = function(err) stop("Unexpected value for --no-partial-pooling")
+    error = function(err) stop("Unexpected value for --complete-pooling")
   )
 }
 
 source(file.path(root_path, "util.R"))
 source(file.path(root_path, "mobility-model", "mob_util.R"))
+
+# Output directory --------------------------------------------------------
+
+if (!dir.exists(script_options$`output-dir`)) {
+  cat(str_glue("Creating directory {script_options$`output-dir`}\n"))
+
+  dir.create(script_options$`output-dir`)
+}
 
 # Population Data For IFR -------------------------------------------------
 
@@ -176,6 +181,15 @@ if (!is_empty(script_options$`country-code`)) {
   }
 } else {
   use_subnat_data <- subnat_data
+}
+
+if (!is_empty(script_options$`region`)) {
+  cat("\nFiltering regions by key...")
+  use_subnat_data <- subnat_data %>%
+    filter(fct_match(key, script_options$`region`))
+  cat("done.\n")
+} else {
+  cat("Using all available regions.\n")
 }
 
 if (any(!use_subnat_data$is_valid)) {
@@ -292,12 +306,14 @@ stan_data <- lst(
   # Configuration
 
   fit_model = if (script_options$fit) 1 else if (script_options$prior) 0 else stop("Unsupported run type."),
-  hierarchical_R0_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "r0")),
-  hierarchical_mobility_model = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "mob")),
-  hierarchical_trend = is_null(script_options$`no-partial-pooling`) || !fct_match(script_options$`no-partial-pooling`, c("all", "trend")),
+  hierarchical_R0_model = is_null(script_options$`complete-pooling`) || !fct_match(script_options$`complete-pooling`, c("all", "r0")),
+  hierarchical_mobility_model = is_null(script_options$`complete-pooling`) || !fct_match(script_options$`complete-pooling`, c("all", "mob")),
+  hierarchical_trend = is_null(script_options$`complete-pooling`) || !fct_match(script_options$`complete-pooling`, c("all", "trend")),
+  no_pooling = script_options$`no-pooling`,
   mobility_model_type = as.integer(script_options$`mobility-model-type`), # 1: 2 * inv_logit(), 2: exp()
   use_log_R0 = !script_options$`old-r0`,
   use_fixed_tau_beta = script_options$`fixed-tau-beta`,
+  use_fixed_ifr = script_options$`fixed-ifr`,
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
   use_parametric_trend = script_options$`include-param-trend`,
@@ -312,6 +328,8 @@ stan_data <- lst(
   hyperparam_tau_national_effect_log_R0_sd = 0.1,
   hyperparam_tau_subnational_effect_log_R0_sd = 0.08,
 
+  tau_impute_cases_inv_mean = 0.03,
+
   # Data
 
   N_national = n_distinct(use_subnat_data$country_code),
@@ -319,7 +337,7 @@ stan_data <- lst(
 
   start_epidemic_offset = (start_epidemic_offset - 1) %/% time_resolution + 1,
   days_observed = as.integer(use_subnat_data$num_days_observed) %>% as.array(),
-  first_case_day_index = use_subnat_data$first_case_day_index,
+  first_case_day_index = as.array(use_subnat_data$first_case_day_index),
   days_to_impute_cases = days_seeding %/% time_resolution,
   days_to_forecast = days_to_forecast %/% time_resolution,
   total_days = max(days_observed),
@@ -352,7 +370,7 @@ stan_data <- lst(
 )
 
 if (!is_null(script_options$hyperparam)) {
-  hyperparam <- yaml::yaml.load_file(script_options$hyperparam)
+  hyperparam <- yaml::yaml.load_file(file.path(root_path, "mobility-model", script_options$hyperparam))
 
   cat("\nUsing hyperparameters:\n")
   iwalk(hyperparam, ~ cat(str_c("\t", .y, " = ", .x, "\n")))
@@ -403,9 +421,9 @@ make_initializer <- function(stan_data) {
       subnational_effect_log_R0_raw = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) rnorm(N - num_singleton_countries, 0, 0.1) else array(dim = 0),
       subnational_effect_log_R0_sd = if (stan_data$use_log_R0 && stan_data$hierarchical_R0_model) as.array(abs(rnorm(stan_data$N_national - num_singleton_countries, 0, 0.075))) else array(dim = 0),
 
-      ifr_noise = as.array(abs(rnorm(N, 0, 0.1))),
+      ifr_noise = if (stan_data$use_fixed_ifr) array(dim = 0) else as.array(abs(rnorm(N, 0, 0.1))),
 
-      trend_lambda = if (stan_data$use_parametric_trend) rbeta(N, 3, 1) else array(dim = 0),
+      trend_lambda = if (stan_data$use_parametric_trend) as.array(rbeta(N, 3, 1)) else array(dim = 0),
       toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
       trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(abs(rnorm(stan_data$N_national, 0, 1))) else array(dim = 0),
       trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(rnorm(N, 0, 1)) else array(dim = 0),
@@ -416,8 +434,8 @@ make_initializer <- function(stan_data) {
 
 cat(str_glue("\nRunning model with {stan_data$N_national} countries and {sum(stan_data$N_subnational)} total subnational entities.\n\n"))
 use_subnat_data %>%
-  count(country_name) %$% {
-    cat(str_glue("\n\t{country_name}: {n} sub regions.\n\n"))
+  count(country_name, country_code) %$% {
+    cat(str_glue("\n\t{country_name} [{country_code}]: {n} sub regions.\n\n"))
   }
 cat("\n")
 
@@ -431,7 +449,7 @@ if (script_options$cmdstan) {
     stan_data,
     cores = script_options$chains,
     chains = script_options$chains,
-    adapt_delta = 0.9,
+    adapt_delta = script_options$`adapt-delta`,
     # init = 0,
     iter_sampling = script_options$iter %/% 2,
     iter_warmup = script_options$iter %/% 2
@@ -445,12 +463,12 @@ if (script_options$cmdstan) {
     iter = script_options$iter,
     chains = script_options$chains,
     control = lst(
-      adapt_delta = 0.95,
+      adapt_delta = script_options$`adapt-delta`,
       max_treedepth = 12
     ),
-    # init = if (script_options$`random-init`) "random" else make_initializer(stan_data)
-    init = make_initializer(stan_data),
-    save_warmup = FALSE,
+    init = if (script_options$`random-init`) "random" else make_initializer(stan_data),
+    # init = make_initializer(stan_data),
+    save_warmup = as.logical(script_options$`save-warmup`)
     # par = "mean_deaths",
     # include = FALSE
   )
@@ -477,30 +495,34 @@ tryCatch({
   all_parameters <- extract_parameters(mob_fit)
 
   cat("Maximum Rhat = ")
-  all_parameters %>%
+  max_rhat <- all_parameters %>%
     select(rhat) %>%
     summarize_all(max, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(max_rhat)
+
   cat("\nMinimum ESS Bulk = ")
-  all_parameters %>%
+  min_ess_bulk <- all_parameters %>%
     select(ess_bulk) %>%
     summarize_all(min, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(min_ess_bulk)
   cat("\nMinimum ESS Tail = ")
-  all_parameters %>%
+  min_ess_tail <- all_parameters %>%
     select(ess_tail) %>%
     summarize_all(min, na.rm = TRUE) %>%
-    first() %>%
-    cat()
+    first()
+  cat(min_ess_tail)
 
   cat("\n\n")
 
-  subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr"))
+  nat_results <- mob_fit %>%
+    extract_nat_results("national_log_R0")
 
-  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend")
+  subnat_results <- mob_fit %>%
+    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"))
+
+  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases")
 
   if (!script_options$`no-predict`) {
     day_param %<>% c("deaths_rep")
@@ -524,7 +546,20 @@ tryCatch({
     mutate(
       daily_data = map2(daily_data, day_data, left_join, by = "day_index")
     ) %>%
-    select(-day_data)
+    select(-day_data) %>%
+    nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
+    mutate(run_country_index = seq(n())) %>%
+    left_join(nat_results, by = "run_country_index") %>%
+    select(-run_country_index) %>%
+    mutate(max_rhat,
+           min_ess_bulk,
+           min_ess_tail,
+           div_trans = get_num_divergent(mob_fit))
+
+  if (!is_empty(script_options$`job-id`)) {
+    use_subnat_data %<>%
+      mutate(job_id = script_options$`job-id`)
+  }
 
   cat("done.\n")
 
