@@ -424,7 +424,7 @@ make_initializer <- function(stan_data) {
       ifr_noise = if (stan_data$use_fixed_ifr) array(dim = 0) else as.array(abs(rnorm(N, 0, 0.1))),
 
       trend_lambda = if (stan_data$use_parametric_trend) as.array(rbeta(N, 3, 1)) else array(dim = 0),
-      toplevel_trend_kappa = - abs(rnorm(1, 0, 0.5)),
+      toplevel_trend_kappa = - rgamma(1, 2, rate = 1/2),
       trend_log_kappa_effect_subnational_sd = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(abs(rnorm(stan_data$N_national, 0, 1))) else array(dim = 0),
       trend_log_kappa_effect_subnational_raw = if (stan_data$use_parametric_trend && stan_data$hierarchical_trend) as.array(rnorm(N, 0, 1)) else array(dim = 0),
       trend_kappa = rnorm(N, 0, 0.5),
