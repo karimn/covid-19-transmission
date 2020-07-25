@@ -1,6 +1,14 @@
 #!/bin/Rscript
 
-root_path <- if (interactive()) "." else ".."
+if (interactive()) {
+  root_path <- "."
+} else {
+  root_path <- ".."
+
+  setwd(root_path)
+  source(file.path("renv", "activate.R"))
+  setwd("mobility-model")
+}
 
 source(file.path(root_path, "mobility-model", "constants.R"))
 
@@ -41,10 +49,6 @@ Options:
 script_options <- if (interactive()) {
   docopt::docopt(opt_desc, 'fit pt py dk -i 4000 --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2 --adapt-delta=0.99')
 } else {
-  setwd(root_path)
-  source(file.path("renv", "activate.R"))
-  setwd("mobility-model")
-
   docopt::docopt(opt_desc)
 }
 
