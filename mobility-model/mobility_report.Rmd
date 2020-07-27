@@ -3,13 +3,14 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_path: data/mobility/results 
+  results_path: temp 
   # results_file: fr_64426766_41_mob_results.rds 
   # fit_file: fr_64426766_41_mob.RData
   # country_code: FR
-  results_file: test_results.rds
-  fit_file: test.RData
-  prior_results_file: test_prior_results.rds
+  results_file: multi_64658355_mob_results.rds
+  fit_file: multi_64658355_mob.RData
+  prior_results_file: multi_64885383_prior_results.rds
+  prior_fit_file: multi_64885383_prior.RData 
   subnat_hier: false 
   multi_singletons: true 
 ---
@@ -295,18 +296,18 @@ prior_results %>%
 # Diagnostics
 
 ```{r, results='asis'}
-if (!is_null(params$fit_file)) {
-  do_diag <- TRUE
-} else {
-  do_diag <- FALSE
+do_diag <- !is_null(params$fit_file)
+do_prior_diag <- !is_null(params$prior_fit_file)
+
+if (!(do_diag || do_prior_diag)) {
   cat("Not Available.")
+} else {
+  library(bayesplot)
+  color_scheme_set("darkgray")
 }
 ```
 
 ```{r diag-setup, include=FALSE, eval=do_diag}
-library(bayesplot)
-color_scheme_set("darkgray")
-  
 load(file.path(params$results_path, params$fit_file))
 
 mob_posterior <- as.array(mob_fit)
@@ -319,6 +320,21 @@ mob_lp <- log_posterior(mob_fit) %>%
   filter(Iteration %in% mob_sub_iter)
 mob_np <- nuts_params(mob_fit) %>%
   filter(Iteration %in% mob_sub_iter)
+```
+
+```{r prior-diag-setup, include=FALSE, eval=do_prior_diag}
+load(file.path(params$results_path, params$prior_fit_file))
+
+prior_mob_posterior <- as.array(mob_fit)
+
+prior_mob_sub_iter <- sample(nrow(prior_mob_posterior), 200) # Shrink it a little
+
+prior_mob_posterior %<>% magrittr::extract(prior_mob_sub_iter, ,)
+
+prior_mob_lp <- log_posterior(mob_fit) %>%
+  filter(Iteration %in% prior_mob_sub_iter)
+prior_mob_np <- nuts_params(mob_fit) %>%
+  filter(Iteration %in% prior_mob_sub_iter)
 ```
 
 ```{r pairs, fig.width=14, fig.height=10, eval=do_diag}
@@ -357,5 +373,27 @@ mcmc_pairs(
   off_diag_args = list(size = 0.75)
   # np_style = pairs_style_np(div_size = 2, div_shape = 16, td_alpha = 0.1)
 )
+```
+
+```{r prior-hypers, fig.width=8, eval=do_prior_diag}
+# mcmc_areas(prior_mob_posterior, 
+#            regex_pars = c("overdisp_deaths"), 
+#            prob = 0.8) + ggtitle("Prior predicted distribution of parameters")
+
+mcmc_areas(prior_mob_posterior, 
+           regex_pars = c("overdisp_deaths", "beta_toplevel", "beta_national_sd", "toplevel_log_R0", "national_effect_log_R0_sd"), 
+           transformations = lst("toplevel_log_R0" = "exp"),
+           prob = 0.8) + ggtitle("Prior predicted distribution of parameters")
+```
+
+```{r hypers, fig.width=8, eval=do_diag}
+# mcmc_areas(mob_posterior, 
+#            regex_pars = c("overdisp_deaths"), 
+#            prob = 0.8) + ggtitle("Posterior distribution of parameters")
+
+mcmc_areas(mob_posterior, 
+           regex_pars = c("overdisp_deaths", "beta_toplevel", "beta_national_sd", "toplevel_log_R0", "national_effect_log_R0_sd"), 
+           transformations = lst("toplevel_log_R0" = "exp"),
+           prob = 0.8) + ggtitle("Posterior distribution of parameters")
 ```
 
