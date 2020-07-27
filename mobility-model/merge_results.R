@@ -1,7 +1,7 @@
 #!/bin/Rscript
 
 "Usage:
-  merge_separate_results <location> <destination> [--lite --results-file-pattern=<pattern>]
+  merge_results <location> <destination> [--lite --results-file-pattern=<pattern>]
 
 Options:
   --lite  Drop all sampling iterations
