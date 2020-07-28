@@ -47,7 +47,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, 'fit pt py dk -i 4000 --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2 --adapt-delta=0.99')
+  docopt::docopt(opt_desc, 'fit it -i 20 --hyperparam=separate_hyperparam.yaml -o test')
 } else {
   docopt::docopt(opt_desc)
 }
@@ -520,11 +520,30 @@ tryCatch({
 
   cat("\n\n")
 
+  hyper_params <- c("toplevel_log_R0")
+
+  hyper_results <- mob_fit %>%
+    extract_hyper_results(hyper_params) %>%
+    bind_rows(
+      extract_hyper_beta(mob_fit)
+    )
+
+  nat_beta_results <- if (any(stan_data$N_subnational > 1)) {
+    mob_fit %>%
+      extract_nat_beta()
+  }
+
   nat_results <- mob_fit %>%
-    extract_nat_results("national_log_R0")
+    extract_nat_results(c("national_log_R0", "subnational_effect_log_R0_sd")) %>%
+    bind_rows(nat_beta_results) %>%
+    nest(param_results = -run_country_index)
+
+  beta_results <- mob_fit %>%
+    extract_subnat_beta()
 
   subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"))
+    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa")) %>%
+    bind_rows(beta_results)
 
   day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases")
 
@@ -535,17 +554,12 @@ tryCatch({
   day_results <- mob_fit %>%
     extract_day_results(day_param)
 
-  beta_results <- mob_fit %>%
-    extract_beta() %>%
-    rename(beta_results = param_results)
-
   use_subnat_data %<>%
     mutate(
       subnat_index = seq(n()),
       daily_data = map(daily_data, mutate, day_index = seq(n()))
     ) %>%
     left_join(subnat_results, by = "subnat_index") %>%
-    left_join(beta_results, by = "subnat_index") %>%
     left_join(day_results, by = c("country_code", "sub_region")) %>%
     mutate(
       daily_data = map2(daily_data, day_data, left_join, by = "day_index")
@@ -555,10 +569,14 @@ tryCatch({
     mutate(run_country_index = seq(n())) %>%
     left_join(nat_results, by = "run_country_index") %>%
     select(-run_country_index) %>%
-    mutate(max_rhat,
-           min_ess_bulk,
-           min_ess_tail,
-           div_trans = get_num_divergent(mob_fit))
+    nest(run_data = everything()) %>%
+    mutate(
+      max_rhat,
+      min_ess_bulk,
+      min_ess_tail,
+      div_trans = get_num_divergent(mob_fit),
+      param_results = list(hyper_results)
+    )
 
   if (!is_empty(script_options$`job-id`)) {
     use_subnat_data %<>%

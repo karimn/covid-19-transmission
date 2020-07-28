@@ -142,6 +142,23 @@ extract_toplevel_results <- function(fit, par, exp_logs = TRUE) {
     unnest(quants)
 }
 
+extract_hyper_results <- function(fit, par, exp_logs = TRUE) {
+  fit %>%
+    extract_parameters(par = par) %>%
+    tidyr::extract(parameters, c("parameter"), ("(\\w+)"), convert = TRUE) %>%
+    bind_rows(
+      filter(., str_detect(parameter, "log")) %>%
+        mutate(iter_data = map(iter_data, exp),
+               parameter = str_remove(parameter, "log_?"))
+    ) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
 extract_nat_results <- function(fit, par, exp_logs = TRUE) {
   fit %>%
     extract_parameters(par = par) %>%
@@ -156,8 +173,7 @@ extract_nat_results <- function(fit, par, exp_logs = TRUE) {
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
-    nest(param_results = -run_country_index)
+    unnest(quants)
 }
 
 extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
@@ -174,8 +190,7 @@ extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
-    nest(param_results = -subnat_index)
+    unnest(quants)
 }
 
 extract_day_results <- function(fit, par) {
@@ -201,17 +216,40 @@ extract_day_results <- function(fit, par) {
     )
 }
 
-extract_beta <- function(fit) {
+extract_hyper_beta <- function(fit) {
   fit %>%
-    extract_parameters(par = "beta") %>%
-    tidyr::extract(parameters, c("coef_index", "subnat_index"), ("\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    extract_parameters(par = c("beta_toplevel", "beta_national_sd")) %>%
+    tidyr::extract(parameters, c("parameter", "coef_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
-    nest(param_results = -subnat_index)
+    unnest(quants)
+}
+
+extract_nat_beta <- function(fit) {
+  fit %>%
+    extract_parameters(par = "beta_subnational_sd") %>%
+    tidyr::extract(parameters, c("parameter", "coef_index", "run_country_index"), ("(\\w+)\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
+extract_subnat_beta <- function(fit) {
+  fit %>%
+    extract_parameters(par = "beta") %>%
+    tidyr::extract(parameters, c("parameter", "coef_index", "subnat_index"), ("(\\w+)\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
 
 }
 
