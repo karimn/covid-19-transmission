@@ -193,14 +193,16 @@ extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
     unnest(quants)
 }
 
-extract_day_results <- function(fit, par) {
+extract_day_results <- function(fit, par, use_subnat_data) {
+  days_observed <- use_subnat_data %$% map_int(daily_data, nrow)
+
   fit %>%
     extract_parameters(par = par) %>%
     tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
-      country_code = rep(rep(use_subnat_data$country_code, times = stan_data$days_observed), length(par)),
-      sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), length(par)),
+      country_code = rep(rep(use_subnat_data$country_code, times = days_observed), length(par)),
+      sub_region = rep(rep(use_subnat_data$sub_region, times = days_observed), length(par)),
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
@@ -250,7 +252,60 @@ extract_subnat_beta <- function(fit) {
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
     unnest(quants)
+}
 
+extract_results <- function(use_subnat_data, mob_fit, hyper_params, nat_params, subnat_params, day_params) {
+  hyper_results <- mob_fit %>%
+    extract_hyper_results(hyper_params) %>%
+    bind_rows(
+      extract_hyper_beta(mob_fit)
+    )
+
+  multi_national <- n_distinct(use_subnat_data$country_code) > 1
+
+  nat_beta_results <- if (multi_national) {
+    mob_fit %>%
+      extract_nat_beta()
+  }
+
+  nat_results <- mob_fit %>%
+    extract_nat_results(nat_params) %>%
+    bind_rows(nat_beta_results) %>%
+    nest(param_results = -run_country_index)
+
+  beta_results <- mob_fit %>%
+    extract_subnat_beta()
+
+  subnat_results <- mob_fit %>%
+    extract_subnat_results(subnat_params) %>%
+    bind_rows(beta_results) %>%
+    nest(param_results = -subnat_index)
+
+  day_results <- mob_fit %>%
+    extract_day_results(day_params, use_subnat_data)
+
+  use_subnat_data %>%
+    mutate(
+      subnat_index = seq(n()),
+    ) %>%
+    select(-any_of("param_results")) %>%
+    left_join(subnat_results, by = "subnat_index") %>%
+    left_join(day_results, by = c("country_code", "sub_region")) %>%
+    mutate(
+      daily_data = map2(daily_data, day_data,
+                        ~ select(.x, -any_of("param_results")) %>%
+                          left_join(.x, .y, by = "day_index"))
+    ) %>%
+    select(-day_data) %>%
+    nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
+    mutate(run_country_index = seq(n())) %>%
+    select(-any_of("param_results")) %>%
+    left_join(nat_results, by = "run_country_index") %>%
+    select(-run_country_index) %>%
+    nest(run_data = everything()) %>%
+    mutate(
+      param_results = list(hyper_results)
+    )
 }
 
 plot_subnat_ci <- function(results, par, beta = FALSE, violin_density = FALSE) {
