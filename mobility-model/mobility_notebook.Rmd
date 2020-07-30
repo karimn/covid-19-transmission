@@ -1,0 +1,536 @@
+---
+title: "Vollmer et al. Model"
+output: html_notebook
+---
+
+```{r setup}
+library(magrittr)
+library(tidyverse)
+library(cowplot)
+library(ggridges)
+library(haven)
+library(latex2exp)
+library(rstan)
+
+source(file.path("..", "util.R"))
+
+ggplot2::theme_set(theme_minimal())
+```
+
+# Prior Prediction
+
+```{r}
+# ita_prior_results <- read_rds(file.path("data", "mobility", "results", "ita_mob_prior_results.rds"))
+# prior_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_prior_results.rds"))
+prior_results <- read_rds(file.path("data", "mobility", "results", "test_hyperparam_concentrated_prior_results.rds"))
+
+load(file.path("data", "mobility", "results", "test_hyperparam_concentrated_prior.RData"))
+
+prior_toplevel_results <- extract_toplevel_results(mob_fit, "toplevel_log_R0")
+```
+
+```{r}
+prior_results %>% 
+  select(sub_region, param_results) %>% 
+  unnest(param_results) %>% 
+  filter(fct_match(parameter, "imputed_cases")) %>% 
+  select(sub_region, iter_data) %>% 
+  unnest(iter_data) %>% 
+  ggplot(aes(iter_value)) +
+  geom_density(aes(group = sub_region), color = alpha("black", 0.25)) +
+  labs(title = TeX("Prior predicted imputed cases"), x = "") +
+  coord_cartesian(xlim = c(0, 300))
+  NULL
+```
+
+
+```{r, fig.width=10}
+prior_results %>% 
+  select(sub_region, param_results) %>% 
+  unnest(param_results) %>% {
+    plot_grid(
+      # prior_toplevel_results %>% 
+        
+      
+      filter(., fct_match(parameter, "R0")) %>% 
+        select(sub_region, iter_data) %>% 
+        unnest(iter_data) %>% 
+        ggplot(aes(iter_value)) +
+        geom_density(aes(group = sub_region), color = alpha("black", 0.25)) +
+        geom_vline(xintercept = 3.28, linetype = "dotted") +
+        labs(title = TeX("Prior predicted $R_0$"), x = "") +
+        NULL,
+      
+      filter(., fct_match(parameter, "national_effect_R0")) %>% 
+        select(sub_region, iter_data) %>% 
+        unnest(iter_data) %>% 
+        ggplot(aes(iter_value)) +
+        # ggplot(aes(iter_value * 3.28)) +
+        geom_density() +
+        # geom_vline(xintercept = 3.28, linetype = "dotted") +
+        # ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
+        scale_x_continuous("", breaks = seq(0, 2, 0.25)) +
+        labs(title = TeX("Prior predicted national effect on $R_0$")) +
+        NULL,
+      
+      filter(., fct_match(parameter, "subnational_effect_R0")) %>% 
+        select(sub_region, iter_data) %>% 
+        unnest(iter_data) %>% 
+        ggplot(aes(iter_value)) +
+        # ggplot(aes(iter_value * 3.28)) +
+        geom_density() +
+        # geom_vline(xintercept = 3.28, linetype = "dotted") +
+        # ggrepel::geom_text_repel(aes(x, y, label = label), nudge_x = 1, data = tibble(x = 3.28, y = 1, label = "3.28")) +
+        scale_x_continuous("", breaks = seq(0, 2, 0.05)) +
+        labs(title = TeX("Prior predicted subnational effect on $R_0$")) +
+        NULL,
+      
+      ncol = 2
+    )
+  }
+```
+
+
+```{r, fig.width=10}
+prior_results %>% 
+    select(sub_region, daily_data) %>% 
+    unnest(daily_data) %>% 
+    select(sub_region, date, day_index, param_results) %>% 
+    unnest(param_results) %>% {
+      # plot_grid(
+        filter(., fct_match(parameter, "mobility_effect")) %>%
+          unnest(iter_data) %>%
+          ggplot(aes(iter_value)) +
+          geom_density(aes(group = sub_region), color = alpha("black", 0.3)) +
+          labs(title = "Prior predicted mobility effect.", x = "")
+
+        # filter(., fct_match(parameter, "Rt_adj")) %>% 
+        #   unnest(iter_data) %>% 
+        #   ggplot() +
+        #   geom_density_ridges(aes(x = iter_value, y = factor(day_index))) +
+        #   labs(title = TeX("Prior predicted adjusted $R_t$."), x = ""),
+        
+      #   ncol = 2
+      # )
+    }
+```
+
+# Analysis
+
+```{r}
+merged_results <- read_rds(file.path("data", "mobility", "results", "clean", "merged.rds"))
+```
+
+
+## Italy
+
+```{r}
+ita_results <- read_rds(file.path("data", "mobility", "results", "it_mob_results.rds"))
+```
+
+```{r it-R0-plot, fig.width=10}
+ita_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r it-mob-plot, fig.height=6, fig.width=12}
+ita_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r it-Rt-plot, fig.height=6, fig.width=12}
+ita_results %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r it-last-Rt-plot, fig.height=4, fig.width=10}
+ita_results %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r, fig.height=10}
+ita_results %>% 
+  select(sub_region, daily_data) %>% 
+  unnest(daily_data) %>% 
+  select(sub_region, day_index, date, new_deaths, param_results) %>% {
+    bind_rows(rep = unnest(., param_results) %>% 
+                filter(fct_match(parameter, "deaths_rep")) %>% 
+                select(sub_region, day_index, date, iter_data) %>% 
+                unnest(iter_data) %>% 
+                rename(new_deaths = iter_value),
+              obs = select(., -param_results) %>% 
+                mutate(iter_id = 0),
+              .id = "est_type")
+  } %>% 
+  filter(iter_id %in% c(0, sample(max(iter_id), 5, replace = FALSE))) %>% 
+  ggplot() +
+  geom_col(aes(day_index, new_deaths, fill = est_type)) +
+  labs(x = "", y = "") +
+  scale_fill_discrete("", labels = c(obs = "Observed", rep = "Predicted")) +
+  facet_grid(rows = vars(sub_region), cols = vars(iter_id), scales = "free_y", switch = "y") + 
+  theme(
+    legend.position = "top",
+    strip.placement = "outside",
+    axis.text.y = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_text(size = 7))
+```
+
+```{r, fig.width=14}
+ita_results %>% 
+  select(sub_region, daily_data) %>% 
+  unnest(daily_data) %>% 
+  select(sub_region, day_index, date, new_deaths, param_results) %>% {
+    bind_rows(rep = unnest(., param_results) %>% 
+                filter(fct_match(parameter, "deaths_rep")) %>% 
+                select(sub_region, day_index, date, iter_data) %>% 
+                unnest(iter_data) %>% 
+                rename(new_deaths = iter_value) %>% 
+                group_by(sub_region, iter_id) %>% 
+                mutate(cumul_deaths = cumsum(new_deaths)) %>% 
+                ungroup(),
+              obs = select(., -param_results) %>% 
+                group_by(sub_region) %>% 
+                mutate(
+                  cumul_deaths = cumsum(new_deaths),
+                  iter_id = 0
+                ) %>% 
+                ungroup(),
+              .id = "est_type")
+  } %>% 
+  filter(iter_id %in% c(0, sample(max(iter_id), 5, replace = FALSE))) %>% 
+  ggplot() +
+  # geom_col(aes(day_index, new_deaths, fill = est_type)) +
+  # geom_col(aes(day_index, cumul_deaths, fill = est_type)) +
+  geom_ribbon(aes(day_index, ymax = cumul_deaths, ymin = 0, fill = est_type), alpha = 0.5) +
+  scale_fill_discrete("", labels = c(obs = "Observed", rep = "Predicted")) +
+  labs(x = "", y = "") +
+  facet_grid(rows = vars(sub_region), cols = vars(iter_id), scales = "free_y", switch = "y") + 
+  theme(
+    legend.position = "top",
+    strip.placement = "outside",
+    axis.text.y = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_text(size = 7))
+```
+
+
+## USA 
+
+```{r}
+usa_results <- read_rds(file.path("data", "mobility", "results", "usa_mob_results.rds"))
+```
+
+```{r us-R0-plot, fig.width=12}
+usa_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r us-Rt-plot, fig.height=14, fig.width=16}
+usa_results %>% 
+  plot_day_ci() +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r us-last-Rt-plot, fig.height=10, fig.width=10}
+usa_results%>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r, fig.width=14}
+usa_results %>% 
+  filter(fct_match(sub_region, c("New York", "Pennsylvania", "Texas", "Maryland", "Washington", "Florida"))) %>% 
+  select(sub_region, daily_data) %>% 
+  unnest(daily_data) %>% 
+  select(sub_region, day_index, date, new_deaths, param_results) %>% {
+    bind_rows(rep = unnest(., param_results) %>% 
+                filter(fct_match(parameter, "deaths_rep")) %>% 
+                select(sub_region, day_index, date, iter_data) %>% 
+                unnest(iter_data) %>% 
+                rename(new_deaths = iter_value) %>% 
+                group_by(sub_region, iter_id) %>% 
+                mutate(cumul_deaths = cumsum(new_deaths)) %>% 
+                ungroup(),
+              obs = select(., -param_results) %>% 
+                group_by(sub_region) %>% 
+                mutate(
+                  cumul_deaths = cumsum(new_deaths),
+                  iter_id = 0
+                ) %>% 
+                ungroup(),
+              .id = "est_type")
+  } %>% 
+  filter(iter_id %in% c(0, sample(max(iter_id), 5, replace = FALSE))) %>% 
+  ggplot() +
+  # geom_col(aes(day_index, new_deaths, fill = est_type)) +
+  # geom_col(aes(day_index, cumul_deaths, fill = est_type)) +
+  geom_ribbon(aes(day_index, ymax = cumul_deaths, ymin = 0, fill = est_type), alpha = 0.5) +
+  scale_fill_discrete("", labels = c(obs = "Observed", rep = "Predicted")) +
+  labs(x = "", y = "") +
+  facet_grid(rows = vars(sub_region), cols = vars(iter_id), scales = "free_y", switch = "y") + 
+  theme(
+    legend.position = "top",
+    strip.placement = "outside",
+    axis.text.y = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_text(size = 7))
+```
+
+```{r, fig.width=14}
+usa_results %>% 
+  filter(fct_match(sub_region, c("New York", "Pennsylvania", "Texas", "Maryland", "Washington", "Florida"))) %>% 
+  select(sub_region, daily_data) %>% 
+  unnest(daily_data) %>% 
+  select(sub_region, day_index, date, new_deaths, param_results) %>% 
+  unnest(param_results) %>% 
+  filter(fct_match(parameter, "deaths_rep")) %>% 
+  ggplot() +
+  # geom_linerange(aes(x = day_index, ymin = per_0.1, ymax = per_0.9)) +
+  geom_ribbon(aes(x = day_index, ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
+  geom_point(aes(x = day_index, y = new_deaths)) +
+  scale_y_continuous(breaks = seq(0, 5000, 200)) +
+  # scale_fill_discrete("", labels = c(obs = "Observed", rep = "Predicted")) +
+  # labs(x = "", y = "") +
+  facet_wrap(vars(sub_region), scales = "free_y") + 
+  # theme(
+  #   legend.position = "top",
+  #   strip.placement = "outside",
+  #   axis.text.y = element_blank(),
+  #   strip.text.x = element_blank(),
+  #   strip.text.y = element_text(size = 7))
+  NULL
+```
+
+```{r, fig.width=14}
+usa_results %>% 
+  filter(fct_match(sub_region, c("New York", "Pennsylvania", "Texas", "Maryland", "Washington", "Florida"))) %>% 
+  select(sub_region, daily_data) %>% 
+  unnest(daily_data) %>% 
+  select(sub_region, day_index, date, new_deaths, param_results) %>% 
+  unnest(param_results) %>% 
+  filter(fct_match(parameter, "deaths_rep")) %>% 
+  ggplot() +
+  geom_ribbon(aes(x = day_index, ymin = per_0.1, ymax = per_0.9), alpha = 0.5) +
+  geom_line(aes(x = day_index, y = new_deaths)) +
+  scale_y_continuous(breaks = seq(0, 5000, 200)) +
+  # scale_fill_discrete("", labels = c(obs = "Observed", rep = "Predicted")) +
+  # labs(x = "", y = "") +
+  facet_wrap(vars(sub_region), scales = "free_y") + 
+  # theme(
+  #   legend.position = "top",
+  #   strip.placement = "outside",
+  #   axis.text.y = element_blank(),
+  #   strip.text.x = element_blank(),
+  #   strip.text.y = element_text(size = 7))
+  NULL
+```
+
+## Italy and USA
+
+```{r}
+ita_usa_results <- read_rds(file.path("data", "mobility", "results", "ita_usa_mob_results.rds"))
+```
+
+```{r it-us-R0-plot, fig.width=12, fig.height=15}
+ita_usa_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  geom_vline(xintercept = 3.28, linetype = "dotted") +
+  labs(title = TeX("R_{0,m}"))
+```
+
+## Argentina, Australia, Canada, Portugal 
+
+```{r}
+incr_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_mob_results.rds"))
+```
+
+```{r incr-mob-plot, fig.height=6, fig.width=12}
+incr_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r incr-R0-plot, fig.width=10}
+incr_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+
+```{r incr-Rt-plot, fig.height=6, fig.width=10}
+incr_results %>% 
+  group_by(country_code, country_name) %>% 
+  do(plot_obj = plot_day_ci(.)) %>% 
+  ungroup() %>% 
+  mutate(plot_obj = map2(plot_obj, country_name, 
+                         ~ .x + 
+                           geom_hline(yintercept = 1, linetype = "dotted") +
+                           labs(subtitle = .y))) %>% 
+  pull(plot_obj) %>%
+  # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
+  plot_grid(plotlist = ., ncol = 1)
+```
+
+```{r, fig.width=14}
+incr_results %>% 
+  plot_post_deaths()
+```
+
+## Argentina, Australia, Canada, Portugal, Poland
+
+```{r}
+# incr_pl_results <- read_rds(file.path("data", "mobility", "results", "ar_au_ca_pt_pl_mob_avg_results.rds"))
+incr_pl_results <- read_rds(file.path("data", "mobility", "results", "test_hyperparam_concentrated4_results.rds"))
+```
+
+```{r incr2-mob-plot, fig.height=8, fig.width=12}
+incr_pl_results %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob", "average_all_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r incr-pl-R0-plot, fig.width=10, fig.height=8}
+incr_pl_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r incr-pl-Rt-plot, fig.height=8, fig.width=10}
+incr_pl_results %>% 
+  group_by(country_code, country_name) %>% 
+  do(plot_obj = plot_day_ci(., "Rt_adj")) %>% 
+  ungroup() %>% 
+  mutate(plot_obj = map2(plot_obj, country_name, 
+                         ~ .x + 
+                           geom_hline(yintercept = 1, linetype = "dotted") +
+                           labs(subtitle = .y))) %>% 
+  pull(plot_obj) %>%
+  # c(ggdraw() + cowplot::draw_label("XY"), .) %>%  
+  plot_grid(plotlist = ., ncol = 1)
+```
+
+## Poland
+
+```{r}
+pl_results <- read_rds(file.path("data", "mobility", "results", "pl_mob_results.rds"))
+```
+
+```{r pl-R0-plot, fig.width=10}
+pl_results %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 5.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r pl-mob-plot, fig.height=6, fig.width=12}
+# pl_results %>% 
+incr_pl_results %>% 
+  filter(fct_match(country_code, "PL")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r pl-Rt-plot, fig.height=6, fig.width=10}
+pl_results %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r, fig.width=14}
+pl_results %>% 
+  plot_post_deaths()
+```
+
+## Brazil
+
+```{r br-R0-plot, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r br-mob-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r br-Rt-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r br-last-Rt-plot, fig.height=4, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r br-post-deaths, fig.width=14}
+merged_results %>% 
+  filter(fct_match(country_code, "BR")) %>% 
+  plot_post_deaths()
+```
+
+## India 
+
+```{r in-R0-plot, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_subnat_ci() + 
+  coord_cartesian(xlim = c(1, 4.5)) +
+  labs(title = TeX("R_{0,m}"))
+```
+
+```{r in-mob-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE) +
+  NULL
+```
+
+```{r in-Rt-plot, fig.height=6, fig.width=12}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_day_ci(par = "Rt_adj", use_date = TRUE) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = TeX("R_{t,m}")) 
+```
+
+```{r in-last-Rt-plot, fig.height=4, fig.width=10}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_last_day_ci() +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  labs(title = TeX("$R_{t,m}$ on the last day")) 
+```
+
+```{r in-post-deaths, fig.width=14}
+merged_results %>% 
+  filter(fct_match(country_code, "IN")) %>% 
+  plot_post_deaths()
+```
