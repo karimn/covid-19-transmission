@@ -4,7 +4,6 @@ if (interactive()) {
   root_path <- "."
 } else {
   root_path <- ".."
-  
   setwd(root_path)
   source(file.path("renv", "activate.R"))
   setwd("mobility-model")
