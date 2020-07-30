@@ -1,7 +1,5 @@
 data/mobility/cleaned_subnat_data.rds filter=lfs diff=lfs merge=lfs -text
 data/mergecleaned.csv filter=lfs diff=lfs merge=lfs -text
-*.rds filter=lfs diff=lfs merge=lfs -text
-*.RData filter=lfs diff=lfs merge=lfs -text
 mob.RData filter=lfs diff=lfs merge=lfs -text
 mob_results.rds filter=lfs diff=lfs merge=lfs -text
 test2_results.rds filter=lfs diff=lfs merge=lfs -text
