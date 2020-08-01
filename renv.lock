@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "3.6.3",
+    "Version": "4.0.2",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -72,12 +72,26 @@
       "Repository": "CRAN",
       "Hash": "c6faf038ba4346b1de19ad7c99b8f94a"
     },
-    "StanHeaders": {
-      "Package": "StanHeaders",
-      "Version": "2.19.2",
+    "RcppParallel": {
+      "Package": "RcppParallel",
+      "Version": "5.0.2",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "41726c001c1cee4ce5869f648c64f013"
+      "Hash": "551d50addb18c7b99637aa377a25afc8"
+    },
+    "StanHeaders": {
+      "Package": "StanHeaders",
+      "Version": "2.21.0-5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "61b35986173e46a61d26252d1429a6bd"
+    },
+    "V8": {
+      "Package": "V8",
+      "Version": "3.2.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3c172c3eba3972c896b73361bfa323d0"
     },
     "XML": {
       "Package": "XML",
@@ -181,14 +195,14 @@
       "Package": "cmdstanr",
       "Version": "0.0.0.9001",
       "Source": "GitHub",
-      "Remotes": "jgabry/posterior",
       "RemoteType": "github",
+      "Remotes": "jgabry/posterior",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "cmdstanr",
       "RemoteUsername": "stan-dev",
       "RemoteRef": "master",
       "RemoteSha": "b67f01a5d9005014d3d672d8d702469ddb39d128",
-      "Hash": "d548c27ce953d9e3d26cf9d659d232a9"
+      "Hash": "9ac2f49f50b703565289112e16f1b0d1"
     },
     "colorspace": {
       "Package": "colorspace",
@@ -444,10 +458,10 @@
     },
     "loo": {
       "Package": "loo",
-      "Version": "2.2.0",
+      "Version": "2.3.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "5384cbaf43ee10191a52478f5e2bad48"
+      "Hash": "31525c7bdf1254e185db6726b34a6eba"
     },
     "lubridate": {
       "Package": "lubridate",
@@ -585,7 +599,7 @@
       "RemoteUsername": "jgabry",
       "RemoteRef": "master",
       "RemoteSha": "71d1faf41870e4d834778995d9a0e3ede4d1b3a6",
-      "Hash": "78c02a305c8c9fc1783f9aaf7ee6faf2"
+      "Hash": "1933655c368c2de53b2c7e600b413d83"
     },
     "praise": {
       "Package": "praise",
@@ -694,10 +708,10 @@
     },
     "rstan": {
       "Package": "rstan",
-      "Version": "2.19.3",
+      "Version": "2.21.2",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "73129bed7783ff433c190b5fce836959"
+      "Hash": "52772d81aa532a6331fd535701882c12"
     },
     "rstudioapi": {
       "Package": "rstudioapi",
