@@ -39,6 +39,7 @@ Options:
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --fixed-ifr  Remove noise from IFR.
+  --hardcode-imputed-cases=<cases> [default: 0]
   --no-predict  No prediction
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
@@ -47,7 +48,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, 'fit it -i 20 --hyperparam=separate_hyperparam.yaml -o test')
+  docopt::docopt(opt_desc, 'fit aw bs -i 20 --hyperparam=separate_hyperparam.yaml -o test --hardcode-imputed-cases=10')
 } else {
   docopt::docopt(opt_desc)
 }
@@ -61,7 +62,7 @@ library(tidyverse)
 library(wpp2019)
 
 script_options %<>%
-  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
+  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff", "hardcode-imputed-cases"), as.integer) %>%
   modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
@@ -321,6 +322,7 @@ stan_data <- lst(
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
   use_parametric_trend = script_options$`include-param-trend`,
+  hardcoded_imputed_cases = script_options$`hardcode-imputed-cases`,
 
   # Hyperparameters
 
