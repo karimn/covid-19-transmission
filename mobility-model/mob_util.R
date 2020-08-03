@@ -262,8 +262,13 @@ extract_results <- function(use_subnat_data, mob_fit, hyper_params, nat_params, 
     )
 
   multi_national <- n_distinct(use_subnat_data$country_code) > 1
+  multi_subregion <- use_subnat_data %>%
+    count(country_code) %>%
+    pull(n) %>%
+    max() %>%
+    is_greater_than(1)
 
-  nat_beta_results <- if (multi_national) {
+  nat_beta_results <- if (multi_national && multi_subregion) {
     mob_fit %>%
       extract_nat_beta()
   }
