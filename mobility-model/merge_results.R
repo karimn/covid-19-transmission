@@ -11,7 +11,8 @@ Options:
 script_options <- if (interactive()) {
   root_path <- "."
 
-  docopt::docopt(opt_desc, "../data/mobility/results/clean_epi3deaths/ ../data/mobility/results/lite_merged_epi3deaths.rds --lite")
+  # docopt::docopt(opt_desc, "../data/mobility/results/clean_epi3deaths/ ../data/mobility/results/lite_merged_epi3deaths.rds --lite")
+  docopt::docopt(opt_desc, "/n/holyscratch01/kremer_lab/karimn/mob_results/run_65564444/ ../temp --lite")
 } else {
   root_path <- ".."
 
@@ -37,9 +38,9 @@ merged_results <- dir(script_options$location, pattern = script_options$`results
   #   results_file = .x,
   #   results = list(read_rds(.x))
   # )) %>%
-  map_dfr(~ read_rds(.x) %>% mutate(results_file = .x)) %>%
+  map_dfr(~ read_rds(.x) %>% mutate(results_file = .x))
   # tidyr::extract(results_file, "job_id", "\\w{2}_(\\d+)_\\d+", remove = FALSE, convert = TRUE) %>%
-  unnest(results)
+  # unnest(results)
   # left_join(diagnostics_data, by = c("job_id", "country_index", "country_code"))
 
 if (script_options$lite) {
