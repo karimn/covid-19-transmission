@@ -299,7 +299,7 @@ extract_results <- function(use_subnat_data, mob_fit, hyper_params, nat_params, 
     mutate(
       daily_data = map2(daily_data, day_data,
                         ~ select(.x, -any_of("param_results")) %>%
-                          left_join(.x, .y, by = "day_index"))
+                          left_join(.y, by = "day_index"))
     ) %>%
     select(-day_data) %>%
     nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
