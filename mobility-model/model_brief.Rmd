@@ -36,7 +36,7 @@ source(file.path("..", "mobility-model", "mob_util.R"))
 
 # Research question
 
-In what follows, we propose a Bayesian model for COVID-19 epidemics. The model incorporates a number of mechanisms that can explain heterogeneous epidemic growth rates and offers a formal, probabilistic way of reasoning about different factors that may drive the heterogeneity. We then attempt to fit the model to national and sub-national data. We use hierarchical model to synthesise evidence across the largest possible number of countries and regions, while making the best possible use of available data through regularising our inference and not discarding the regions which have low spread of COVID.
+In what follows, we propose a Bayesian model for COVID-19 epidemics. The model is based on simple inputs (primarily the daily time series of new deaths) but it incorporates a number of mechanisms that can explain heterogeneous epidemic growth rates. Using the model offers a formal, probabilistic approach to reasoning about different factors that may drive the heterogeneity. We fit the proposed model to both national and sub-national data. We use hierarchical model to synthesise evidence across the largest possible number of countries and regions, while making the best possible use of available data through regularising our inference and not discarding the regions which have low spread of COVID.
 
 We can distinguish five main potential mechanisms that would lead to some regions being less affected by the pandemic. In particular, we try to focus on the factors that may be operating in the developing countries. The factors are: 1) low risk of severe outcomes, 2) low seeding, 3) low $R_0$, 4) under-reporting of outcomes, 5) decrease in reproductive number $R$ over time due to behaviour change, government intervention or other factors.
 
@@ -70,20 +70,30 @@ We currently use data from about 120 countries, 30 of which report COVID outcome
 
 The inputs for each unit of analysis are: mobility data over time, mortality over time, population size, time to recording the first case, time to first $n$ deaths. (To be expanded.)
 
-For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data.
+For each country we calculate the expected infection fatality rate (IFR) by reweighting the age-specific IFR estimated by @Verity in Chinese individuals through age distribution based on World Population Prospects data. (Note: better adjustments, which also take uncertainty into account, may be possible by using estimates from @ghisolfi_predicted_2020)
 
 
 
 # Bayesian model of COVID transmission in countries and regions
 
-We extend @Vollmer2020 for our Bayesian modeling framework. The data generating process models the number of infections as latent outcomes, which then predicts the expected number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. The primary component of the model adds structure to how transmission of infection evolves over time predicted by observed outcomes. Vollmer et al. use Google mobility data as a measure of social contact, which we also do. This is one direction we hope to expand the model by including more predictors.^[Regularization using priors will assist us in avoiding overfitting to the data.]
+We extend prior work by @Vollmer2020 into a hierarchical Bayesian framework that is better suited to our research questions. The number of infections are treated as latent variables, which then lead to the latent number of deaths, which then leads to observed, COVID-attributable deaths. Latent variables are linked through convolutions of random variables. This convolution link is established based on empirical data (from the literature) on times 1) from infection to becoming infectious ($g$), 2) from infection to death ($\pi$).
+
+To allow for changes in COVID reproduction over time (typically decreasing), @Vollmer2020 use Google mobility data as a measure of social contact, which we also do in this initial version. The next version will include more explanatory variables, both time-varying and fixed, which can account for these differences.^[Regularization using priors will assist us in avoiding overfitting to the data.]
+
+
+## Model notation
+
+This complex Bayesian model can be divided into three parts: generation of new infections, generation of new deaths from infections, and a model of how deaths are observed. We first present the notation and make a couple of remarks on hierarchical structure of the model afterwards.
+
+__Number of infected, generation of new cases__
 
 First, the transmission of infection $c_{tm}$, in sub-region $m$ on day $t$, is modeled, for $t > 6$, as
+
 \begin{align*} 
   c_{tm} &= S_{tm} R_{tm} \sum_{\tau=1}^{t-1} c_{\tau,m} \tilde{g}_{\tau - 1},  
 \end{align*}
 
-and for the first six days we impute the number of cases as
+and for $t = 1, 2, \ldots, 6$ we impute the number of cases as
 
 \begin{gather}
   \begin{aligned}
@@ -93,7 +103,7 @@ and for the first six days we impute the number of cases as
 \end{gather}
 
 * $S_{tm} = 1 - \frac{\sum_{i = 1}^{t-1} c_{im}}{N_m}$ is the susceptible proportion of the population, where $N_m$ is the size of the population in sub-region $m$. 
-* $\tilde{g}_s$ are a discretization of the a continuous generation \[ g \sim \mathtt{Gamma}(6.5, 0.62), \] such that $g_s = \int_{\min(s-0.5,0)}^{s+0.5} p_g(\tau)\ \mathrm{d}\tau$, where $p_g$ is the density function for $g$.
+* $\tilde{g}_s$ are a discretization of continuous generation of new infections $g$ \[ g \sim \mathtt{Gamma}(6.5, 0.62), \] such that $g_s = \int_{\min(s-0.5,0)}^{s+0.5} p_g(\tau)\ \mathrm{d}\tau$, where $p_g$ is the density function for $g$.
 
 
 $R_{tm}$, the dynamic transmission rate is defined as 
@@ -137,6 +147,8 @@ In addition, we include parametric model of reduced contact rate such that
 
 This is a smoothly decreasing trend in contact representing unobservable qualitative changes in social contact not captured by mobility data. The midpoint of this trend, $t^*_m$, is the day the first covid-19 case is detected. __Work in progress, t* will be defined differently.__
 
+__Expected number of deaths__
+
 The expected number of deaths, $d_{tm}$ is modeled as
 
 \begin{align}\label{eq:d_tm}
@@ -150,9 +162,15 @@ where the infection fatality rate (IFR), $\textrm{ifr}^*_m$, is modeled as
   \eta_m &\sim \mathtt{Normal}(1, 0.1).
 \end{align*}
 
-In other words we perturb the pre-calculated IFR by a small random variable. Time-to-deaths, $\pi_s$, is modeled as a continuous distribution
+In other words we perturb the pre-calculated IFR by a small random variable. 
+
+Time-to-deaths, $\pi_s$, is modeled as a continuous distribution
 \[ \pi_s \sim \mathtt{Gamma}(5.1, 0.86) + \mathtt{Gamma}(17.8, 0.45),\]
 which we discretized as $\tilde{\pi}_s = \int_{\min(s-0.5, 0)}^{s+0.5} p_\pi(\tau)\,\mathrm{d}\tau$, where $p_\pi$ is the density function of $\pi$.
+
+
+
+__Likelihood (observed deaths)__
 
 Finally, the likelihood model for the observed number of deaths, $D_{tm}$, is 
 
@@ -162,9 +180,16 @@ Finally, the likelihood model for the observed number of deaths, $D_{tm}$, is
 
 and $\psi \sim \mathtt{Normal}^+(0, 5)$.
 
+
+## Hierarchical structure of the model
+
 There are two main components of the model that allow us to model the heterogeneity of transmission. First, as shown in \eqref{eq:r0}, our model allows countries and their sub-regions to deviate from the superpopulation level of $R_0$ by introducing an additive country and sub-region random effect to the logarithm of $R_0$. In addition, we model the variance for this heterogeneity by including it as a parameter of the model, and for each country, we allow this variance to vary independently over its sub-regions. Second, the linear parameters in \eqref{eq:beta}, that govern how time varying mobility variables (or whatever other predictors we include), also vary additively over countries and sub-regions. 
 
+
+
 ## How does the model address the research questions
+
+__WW: Unfinished -- perhaps best to discuss live, this document is too long already__
 
 1. _Low risk of severe disease_: as per \eqref{eq:d_tm}, the model assumes
 2. _Low seeding_: this is addressed by \eqref{eq:imputed}

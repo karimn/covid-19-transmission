@@ -35,7 +35,8 @@ prepare_subnat_data <- function(raw_data_file, min_deaths) {
           cum_deaths = coalesce(cum_deaths, cumsum(new_deaths)),
 
           new_cases = coalesce(new_cases, 0),
-          cum_cases = zoo::na.locf0(cum_cases) %>% coalesce(0)
+          cum_cases = zoo::na.locf0(cum_cases) %>% coalesce(0),
+          stringency_index = coalesce(stringency_index,0)
         )
     } else return(daily_data)
   }
