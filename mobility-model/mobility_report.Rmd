@@ -3,16 +3,13 @@ output: pdf_document
 header-includes:
   - \usepackage{pxfonts} 
 params:
-  results_path: temp 
-  # results_file: fr_64426766_41_mob_results.rds 
-  # fit_file: fr_64426766_41_mob.RData
-  # country_code: FR
-  results_file: multi_64658355_mob_results.rds
-  fit_file: multi_64658355_mob.RData
-  prior_results_file: multi_64885383_prior_results.rds
-  prior_fit_file: multi_64885383_prior.RData 
-  subnat_hier: false 
-  multi_singletons: true 
+  results_path: temp
+  country_code: IT 
+  results_file: it_65506028_57_mob_results.rds 
+  fit_file: it_65506028_57_mob.RData
+  subnat_hier: true 
+  multi_singletons: false 
+  extract_results: false 
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -36,28 +33,73 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r}
+source(file.path("util.R"))
 source(file.path("mobility-model", "mob_util.R"))
 ```
 
 ```{r}
+do_diag <- !is_null(params$fit_file)
+do_prior_diag <- !is_null(params$prior_fit_file)
+
 results <- read_rds(file.path(params$results_path, params$results_file))
 
-if (!params$multi_singletons) {
-  results %<>% 
-    filter(fct_match(country_code, params$country_code))
-  
-  country_name <- results$country_name %>% unique()
-} else {
-  country_name <- "Multiple Countries"
+if (!is_null(params$country_code)) {
+  results %<>%
+    mutate(run_data = map(run_data, filter, fct_match(country_code, params$country_code))) 
 }
+
+if (do_diag) {
+  load(file.path(params$results_path, params$fit_file))
+  
+  if (params$extract_results) {
+    all_parameters <- extract_parameters(mob_fit)
+  
+    max_rhat <- all_parameters %>%
+      select(rhat) %>%
+      summarize_all(max, na.rm = TRUE) %>%
+      first()
+  
+    min_ess_bulk <- all_parameters %>%
+      select(ess_bulk) %>%
+      summarize_all(min, na.rm = TRUE) %>%
+      first()
+    
+    min_ess_tail <- all_parameters %>%
+      select(ess_tail) %>%
+      summarize_all(min, na.rm = TRUE) %>%
+      first()
+
+    results %<>%
+      select(run_data) %>% 
+      unnest(run_data) %>% 
+      select(-param_results) %>% 
+      unnest(country_data) %>% 
+      extract_results(mob_fit, 
+                      hyper_params = c("toplevel_log_R0"), 
+                      nat_params = c("national_log_R0", "national_effect_log_R0", "subnational_effect_log_R0_sd"),
+                      subnat_params = c("log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"),
+                      day_params = c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases", "deaths_rep")) %>% 
+      mutate(
+        max_rhat,
+        min_ess_bulk,
+        min_ess_tail,
+        div_trans = get_num_divergent(mob_fit),
+      )
+  }
+}
+
+country_names <- results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
+  pull(country_name)
 ```
 
 ---
-title: `r country_name`
+title: `r if (length(country_names) > 1) 'Multiple Countries' else country_names`
 ---
 
 ```{r, results='asis'}
-if (params$multi_singletons) {
+if (length(country_names) > 1) {
   cat("Countries:\n\n")
   cat(str_c("* ", results$country_name, collapse = "\n"))
 }
@@ -67,6 +109,8 @@ if (params$multi_singletons) {
 
 ```{r pop, fig.width=8}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_population(at_level = if (params$multi_singletons) "country_name" else "sub_region")
@@ -74,6 +118,8 @@ results %>%
 
 ```{r obs-cases, fig.width=15}
 results %>%
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_data(par = "new_cases", use_date = TRUE, use_free_y_scale = TRUE, use_bar = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -82,6 +128,8 @@ results %>%
 
 ```{r obs-deaths, fig.width=15}
 results %>%
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_data(par = "new_deaths", use_date = TRUE, use_free_y_scale = TRUE, use_bar = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region")  +
@@ -90,6 +138,8 @@ results %>%
 
 ```{r mob-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_data(par = c("g_residential", "g_transit_stations", "average_mob"), use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -100,16 +150,18 @@ results %>%
 
 # Analysis
 
-Number of divergent transitions = `r first(results$divergent_trans)`
+Number of divergent transitions = `r str_c(results$div_trans, collapse = ', ')`
 
-Maximum $\hat{R}$ = `r first(results$max_rhat)`
+Maximum $\hat{R}$ = `r str_c(results$max_rhat, collapse = ', ')`
 
-Minimum Bulk ESS = `r first(results$min_ess_bulk)`
+Minimum Bulk ESS = `r str_c(results$min_ess_bulk, collapse = ', ')`
 
-Minimum Tail ESS = `r first(results$min_ess_tail)`
+Minimum Tail ESS = `r str_c(results$min_ess_tail, collapse = ', ')`
 
 ```{r R0-plot, fig.width=10}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_subnat_ci(par = "R0") + 
@@ -118,6 +170,8 @@ results %>%
 
 ```{r Rt-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_ci(par = c("Rt", "Rt_adj"), use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -134,6 +188,8 @@ where
 
 ```{r param-trend, fig.height=6, fig.width=12}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_ci(par = "trend", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -142,6 +198,8 @@ results %>%
 
 ```{r mobility-effect-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_ci(par = "mobility_effect", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -151,6 +209,8 @@ results %>%
 
 ```{r adj-factor-plot, fig.height=6, fig.width=12}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_day_ci(par = "adj_factor", use_date = TRUE, facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -161,6 +221,8 @@ Mobility linear model: $\beta_1 \cdot X_\text{residential} + \beta_2 \cdot X_\te
 
 ```{r beta, fig.width=10, fig.height=8}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_subnat_ci(beta = TRUE) + 
@@ -169,6 +231,8 @@ results %>%
 
 ```{r post-deaths, fig.width=10, fig.height=8}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
@@ -176,6 +240,8 @@ results %>%
 
 ```{r imputed-cases, fig.width=10}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_subnat_ci(par = "imputed_cases") + 
@@ -184,6 +250,8 @@ results %>%
 
 ```{r cases, fig.width=10, fig.height=8}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_pred_vs_obs("new_cases", "new_cases", facet_by = if (params$multi_singletons) "country_name" else "sub_region") +
@@ -192,6 +260,8 @@ results %>%
 
 ```{r ifr, fig.width=10}
 results %>% 
+  select(run_data) %>% 
+  unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_subnat_ci(par = "ifr") + 
@@ -296,9 +366,6 @@ prior_results %>%
 # Diagnostics
 
 ```{r, results='asis'}
-do_diag <- !is_null(params$fit_file)
-do_prior_diag <- !is_null(params$prior_fit_file)
-
 if (!(do_diag || do_prior_diag)) {
   cat("Not Available.")
 } else {
@@ -308,8 +375,6 @@ if (!(do_diag || do_prior_diag)) {
 ```
 
 ```{r diag-setup, include=FALSE, eval=do_diag}
-load(file.path(params$results_path, params$fit_file))
-
 mob_posterior <- as.array(mob_fit)
 
 mob_sub_iter <- sample(nrow(mob_posterior), 200) # Shrink it a little
@@ -339,19 +404,20 @@ prior_mob_np <- nuts_params(mob_fit) %>%
 
 ```{r pairs, fig.width=14, fig.height=10, eval=do_diag}
 pairs_pars <- c(
-  "overdisp_deaths", "mean_deaths[10]", "imputed_cases[1]",
+  "overdisp_deaths[1]", "mean_deaths[10]", "imputed_cases[1]",
   "toplevel_log_R0", 
   "beta_toplevel[2]", 
-  "ifr_noise[1]",
+  # "ifr_noise[1]",
   "trend_lambda[1]", "toplevel_trend_kappa"
 )
 
 pairs_trans <- lst(
-  overdisp_deaths = "log",
+  "overdisp_deaths[1]" = "log",
   "mean_deaths[10]" = "log",
   "imputed_cases[1]" = "log",
-  "trend_lambda[1]" = "log", "toplevel_trend_kappa" = function(kappa) log(-kappa),
-  "ifr_noise[1]" = "log"
+  "trend_lambda[1]" = "log", 
+  "toplevel_trend_kappa" = function(kappa) log(-kappa),
+  # "ifr_noise[1]" = "log"
 )
 
 if (params$subnat_hier && !params$multi_singletons) {
