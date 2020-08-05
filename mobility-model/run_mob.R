@@ -522,40 +522,11 @@ tryCatch({
 
   cat("\n\n")
 
-  # hyper_params <- c("toplevel_log_R0")
-  #
-  # hyper_results <- mob_fit %>%
-  #   extract_hyper_results(hyper_params) %>%
-  #   bind_rows(
-  #     extract_hyper_beta(mob_fit)
-  #   )
-  #
-  # nat_beta_results <- if (any(stan_data$N_subnational > 1)) {
-  #   mob_fit %>%
-  #     extract_nat_beta()
-  # }
-  #
-  # nat_results <- mob_fit %>%
-  #   extract_nat_results(c("national_log_R0", "national_effect_log_R0", "subnational_effect_log_R0_sd")) %>%
-  #   bind_rows(nat_beta_results) %>%
-  #   nest(param_results = -run_country_index)
-  #
-  # beta_results <- mob_fit %>%
-  #   extract_subnat_beta()
-  #
-  # subnat_results <- mob_fit %>%
-  #   extract_subnat_results(c("log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa")) %>%
-  #   bind_rows(beta_results) %>%
-  #   nest(param_results = -subnat_index)
-
   day_params <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases")
 
   if (!script_options$`no-predict`) {
     day_params %<>% c("deaths_rep")
   }
-
-  # day_results <- mob_fit %>%
-  #   extract_day_results(day_param, use_subnat_data)
 
   use_subnat_data %<>%
     extract_results(mob_fit,
@@ -563,26 +534,11 @@ tryCatch({
                     nat_params = c("national_log_R0", "national_effect_log_R0", "subnational_effect_log_R0_sd"),
                     subnat_params = c("log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"),
                     day_params = day_params) %>%
-    # mutate(
-    #   subnat_index = seq(n()),
-    # ) %>%
-    # left_join(subnat_results, by = "subnat_index") %>%
-    # left_join(day_results, by = c("country_code", "sub_region")) %>%
-    # mutate(
-    #   daily_data = map2(daily_data, day_data, left_join, by = "day_index")
-    # ) %>%
-    # select(-day_data) %>%
-    # nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
-    # mutate(run_country_index = seq(n())) %>%
-    # left_join(nat_results, by = "run_country_index") %>%
-    # select(-run_country_index) %>%
-    # nest(run_data = everything()) %>%
     mutate(
       max_rhat,
       min_ess_bulk,
       min_ess_tail,
       div_trans = get_num_divergent(mob_fit),
-      # param_results = list(hyper_results)
     )
 
   if (!is_empty(script_options$`job-id`)) {
