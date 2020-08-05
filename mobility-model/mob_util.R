@@ -483,6 +483,7 @@ trim_iter_data <- function(results) {
       run_data = map(
         run_data,
         mutate,
+        param_results = map(param_results, select, -iter_data),
         country_data = map(
           country_data,
           mutate,
