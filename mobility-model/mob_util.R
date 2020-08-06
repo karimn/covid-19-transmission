@@ -319,7 +319,8 @@ plot_subnat_ci <- function(results, par, beta = FALSE, violin_density = FALSE) {
 
   plot_obj <- results %>% {
     if (beta) {
-      unnest(., beta_results) %>%
+      unnest(., param_results) %>%
+        filter(fct_match(parameter, "beta")) %>%
         mutate(parameter = str_c("$\\beta_", coef_index, "$"))
     } else {
       unnest(., param_results) %>%
@@ -407,7 +408,7 @@ plot_day_ci <- function(results, par, use_date = FALSE, facet_by = "sub_region")
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.
                     Ribbons represent the 80% credible intervals.") +
-    facet_wrap(facet_by, ncol = 3) + #, strip.position = "left") +
+    facet_wrap(facet_by, ncol = 3, scales = "free_y") + #, strip.position = "left") +
     theme(
       # strip.placement = "outside",
       # strip.text.y.left = element_text(angle = 0),
