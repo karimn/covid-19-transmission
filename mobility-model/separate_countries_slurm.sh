@@ -18,4 +18,5 @@ hierarch_args="--complete-pooling=trend"
 mob_model_type="--mobility-model-type=${4}"
 stan_controls="--adapt-delta=0.99"
 
-Rscript run_mob.R $run_type ${SLURM_ARRAY_TASK_ID} -i $iter --hyperparam=separate_hyperparam.yaml --job-id=${SLURM_ARRAY_JOB_ID} --show-script-options  $output_args $hierarch_args $mob_model_type $stan_controls --include-param-trend  
+Rscript run_mob.R $run_type ${SLURM_ARRAY_TASK_ID} -i $iter --hyperparam=separate_hyperparam.yaml --job-id=${SLURM_ARRAY_JOB_ID} --show-script-options  $output_args $hierarch_args $mob_model_type $stan_controls --include-param-trend 
+#--hardcode-imputed-cases=10 
