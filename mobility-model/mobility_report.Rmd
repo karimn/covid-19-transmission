@@ -5,11 +5,12 @@ header-includes:
 params:
   results_path: temp
   country_code: IT 
-  results_file: it_65506028_57_mob_results.rds 
-  fit_file: it_65506028_57_mob.RData
+  results_file: it_66001141_57_mob_results.rds 
+  fit_file: it_66001141_57_mob.RData
   subnat_hier: true 
   multi_singletons: false 
   extract_results: false 
+  suppress_imputed_cases: true
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -238,14 +239,14 @@ results %>%
   plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
 ```
 
-```{r imputed-cases, fig.width=10}
+```{r imputed-cases, fig.width=10, eval=!params$suppress_imputed_cases}
 results %>% 
   select(run_data) %>% 
   unnest(run_data) %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
   plot_subnat_ci(par = "imputed_cases") + 
-  labs(title = TeX("Imputed Cases"))
+  labs(title = TeX("Imputed Cases")),
 ```
 
 ```{r cases, fig.width=10, fig.height=8}
@@ -338,7 +339,7 @@ prior_results %>%
   plot_post_deaths(facet_by = if (params$multi_singletons) "country_name" else "sub_region")
 ```
 
-```{r prior-imputed-cases, fig.width=10, eval=do_prior_predict}
+```{r prior-imputed-cases, fig.width=10, eval=do_prior_predict && !params$suppress_imputed_cases}
 prior_results %>% 
   select(country_code, country_name, country_data) %>% 
   unnest(country_data) %>% 
@@ -404,21 +405,30 @@ prior_mob_np <- nuts_params(mob_fit) %>%
 
 ```{r pairs, fig.width=14, fig.height=10, eval=do_diag}
 pairs_pars <- c(
-  "overdisp_deaths[1]", "mean_deaths[10]", "imputed_cases[1]",
+  "overdisp_deaths[1]", "mean_deaths[10]", 
   "toplevel_log_R0", 
   "beta_toplevel[2]", 
   # "ifr_noise[1]",
   "trend_lambda[1]", "toplevel_trend_kappa"
 )
 
+if (!params$suppress_imputed_cases) {
+  pairs_pars %<>% c("imputed_cases[1]") 
+}
+
 pairs_trans <- lst(
   "overdisp_deaths[1]" = "log",
   "mean_deaths[10]" = "log",
-  "imputed_cases[1]" = "log",
   "trend_lambda[1]" = "log", 
   "toplevel_trend_kappa" = function(kappa) log(-kappa),
   # "ifr_noise[1]" = "log"
 )
+
+if (!params$suppress_imputed_cases) {
+  pairs_trans %<>% update_list(
+    "imputed_cases[1]" = "log"
+  )
+}
 
 if (params$subnat_hier && !params$multi_singletons) {
   pairs_pars %<>% c(
