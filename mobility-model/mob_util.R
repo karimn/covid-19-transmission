@@ -143,6 +143,23 @@ extract_toplevel_results <- function(fit, par, exp_logs = TRUE) {
     unnest(quants)
 }
 
+extract_hyper_results <- function(fit, par, exp_logs = TRUE) {
+  fit %>%
+    extract_parameters(par = par) %>%
+    tidyr::extract(parameters, c("parameter"), ("(\\w+)"), convert = TRUE) %>%
+    bind_rows(
+      filter(., str_detect(parameter, "log")) %>%
+        mutate(iter_data = map(iter_data, exp),
+               parameter = str_remove(parameter, "log_?"))
+    ) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
 extract_nat_results <- function(fit, par, exp_logs = TRUE) {
   fit %>%
     extract_parameters(par = par) %>%
@@ -157,8 +174,7 @@ extract_nat_results <- function(fit, par, exp_logs = TRUE) {
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
-    nest(param_results = -run_country_index)
+    unnest(quants)
 }
 
 extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
@@ -175,18 +191,19 @@ extract_subnat_results <- function(fit, par, exp_logs = TRUE) {
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
-    nest(param_results = -subnat_index)
+    unnest(quants)
 }
 
-extract_day_results <- function(fit, par) {
+extract_day_results <- function(fit, par, use_subnat_data) {
+  days_observed <- use_subnat_data %$% map_int(daily_data, nrow)
+
   fit %>%
     extract_parameters(par = par) %>%
     tidyr::extract(parameters, c("parameter", "long_day_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
-      country_code = rep(rep(use_subnat_data$country_code, times = stan_data$days_observed), length(par)),
-      sub_region = rep(rep(use_subnat_data$sub_region, times = stan_data$days_observed), length(par)),
+      country_code = rep(rep(use_subnat_data$country_code, times = days_observed), length(par)),
+      sub_region = rep(rep(use_subnat_data$sub_region, times = days_observed), length(par)),
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
@@ -202,18 +219,99 @@ extract_day_results <- function(fit, par) {
     )
 }
 
-extract_beta <- function(fit) {
+extract_hyper_beta <- function(fit) {
   fit %>%
-    extract_parameters(par = "beta") %>%
-    tidyr::extract(parameters, c("coef_index", "subnat_index"), ("\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    extract_parameters(par = c("beta_toplevel", "beta_national_sd")) %>%
+    tidyr::extract(parameters, c("parameter", "coef_index"), ("(\\w+)\\[(\\d+)\\]"), convert = TRUE) %>%
     mutate(
       iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
       quants = map(iter_data, quantilize, iter_value),
       mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
     ) %>%
-    unnest(quants) %>%
+    unnest(quants)
+}
+
+extract_nat_beta <- function(fit) {
+  fit %>%
+    extract_parameters(par = "beta_subnational_sd") %>%
+    tidyr::extract(parameters, c("parameter", "coef_index", "run_country_index"), ("(\\w+)\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
+extract_subnat_beta <- function(fit) {
+  fit %>%
+    extract_parameters(par = "beta") %>%
+    tidyr::extract(parameters, c("parameter", "coef_index", "subnat_index"), ("(\\w+)\\[(\\d+),(\\d+)\\]"), convert = TRUE) %>%
+    mutate(
+      iter_data = map(iter_data, ~ tibble(iter_value = c(.), iter_id = seq(NROW(.) * NCOL(.)))),
+      quants = map(iter_data, quantilize, iter_value),
+      mean = map(iter_data, pull, iter_value) %>% map_dbl(mean),
+    ) %>%
+    unnest(quants)
+}
+
+extract_results <- function(use_subnat_data, mob_fit, hyper_params, nat_params, subnat_params, day_params) {
+  hyper_results <- mob_fit %>%
+    extract_hyper_results(hyper_params) %>%
+    bind_rows(
+      extract_hyper_beta(mob_fit)
+    )
+
+  multi_national <- n_distinct(use_subnat_data$country_code) > 1
+  multi_subregion <- use_subnat_data %>%
+    count(country_code) %>%
+    pull(n) %>%
+    max() %>%
+    is_greater_than(1)
+
+  nat_beta_results <- if (multi_national && multi_subregion) {
+    mob_fit %>%
+      extract_nat_beta()
+  }
+
+  nat_results <- mob_fit %>%
+    extract_nat_results(nat_params) %>%
+    bind_rows(nat_beta_results) %>%
+    nest(param_results = -run_country_index)
+
+  beta_results <- mob_fit %>%
+    extract_subnat_beta()
+
+  subnat_results <- mob_fit %>%
+    extract_subnat_results(subnat_params) %>%
+    bind_rows(beta_results) %>%
     nest(param_results = -subnat_index)
 
+  day_results <- mob_fit %>%
+    extract_day_results(day_params, use_subnat_data)
+
+  use_subnat_data %>%
+    mutate(
+      subnat_index = seq(n()),
+    ) %>%
+    select(-any_of("param_results")) %>%
+    left_join(subnat_results, by = "subnat_index") %>%
+    left_join(day_results, by = c("country_code", "sub_region")) %>%
+    mutate(
+      daily_data = map2(daily_data, day_data,
+                        ~ select(.x, -any_of("param_results")) %>%
+                          left_join(.y, by = "day_index"))
+    ) %>%
+    select(-day_data) %>%
+    nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
+    mutate(run_country_index = seq(n())) %>%
+    select(-any_of("param_results")) %>%
+    left_join(nat_results, by = "run_country_index") %>%
+    select(-run_country_index) %>%
+    nest(run_data = everything()) %>%
+    mutate(
+      param_results = list(hyper_results)
+    )
 }
 
 plot_subnat_ci <- function(results, par, beta = FALSE, violin_density = FALSE) {
@@ -221,7 +319,8 @@ plot_subnat_ci <- function(results, par, beta = FALSE, violin_density = FALSE) {
 
   plot_obj <- results %>% {
     if (beta) {
-      unnest(., beta_results) %>%
+      unnest(., param_results) %>%
+        filter(fct_match(parameter, "beta")) %>%
         mutate(parameter = str_c("$\\beta_", coef_index, "$"))
     } else {
       unnest(., param_results) %>%
@@ -309,7 +408,7 @@ plot_day_ci <- function(results, par, use_date = FALSE, facet_by = "sub_region")
     labs(x = "", y = "",
          caption = "Vertical dotted lines represent the first seeding day and the epidemic start date.
                     Ribbons represent the 80% credible intervals.") +
-    facet_wrap(facet_by, ncol = 3) + #, strip.position = "left") +
+    facet_wrap(facet_by, ncol = 3, scales = "free_y") + #, strip.position = "left") +
     theme(
       # strip.placement = "outside",
       # strip.text.y.left = element_text(angle = 0),
@@ -381,8 +480,18 @@ render_country_reports <- function(results,
 
 trim_iter_data <- function(results) {
   results %>%
-    mutate(country_data = map(country_data,
-                              mutate,
-                              param_results = map(param_results, select, -iter_data),
-                              daily_data = map(daily_data, mutate, param_results = map(param_results, select, - iter_data))))
+    mutate(
+      param_results = map(param_results, select, -iter_data),
+      run_data = map(
+        run_data,
+        mutate,
+        param_results = map(param_results, select, -iter_data),
+        country_data = map(
+          country_data,
+          mutate,
+          param_results = map(param_results, select, -iter_data),
+          daily_data = map(daily_data, mutate, param_results = map(param_results, select, - iter_data))
+        )
+      )
+    )
 }
