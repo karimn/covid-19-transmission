@@ -394,7 +394,7 @@ make_initializer <- function(stan_data) {
 
   function(chain_id) {
     lst(
-      beta_toplevel = if (stan_data$hierarchical_mobility_model) as.array(rnorm(stan_data$num_coef, 0, 0.1)) else array(dim = 0),
+      beta_toplevel = as.array(rnorm(stan_data$num_coef, 0, 0.1)),
       beta_national_sd = if (is_multinational && stan_data$hierarchical_mobility_model) as.array(abs(rnorm(stan_data$num_coef, 0, 0.1))) else array(dim = c(0)),
 
       beta_national_raw = if (is_multinational && stan_data$hierarchical_mobility_model)
