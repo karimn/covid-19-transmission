@@ -33,6 +33,7 @@ data {
   int<lower = 0, upper = 1> use_transformed_param_constraints;
   int<lower = 0, upper = 1> use_parametric_trend;
   int<lower = 0, upper = 1> use_fixed_ifr;
+  int<lower = 0> hardcoded_imputed_cases;
 
   int<lower = 1> N_national; // Number of countries
   int<lower = 1> N_subnational[N_national]; // Number of subnational entities for each country
@@ -167,11 +168,10 @@ transformed data {
 }
 
 parameters {
-  // vector<lower = 0>[N] overdisp_deaths;
-  real<lower = 0> overdisp_deaths;
+  vector<lower = 0>[N_national] overdisp_deaths;
 
   real<lower = 0> tau_impute_cases;
-  vector<lower = 0>[N] imputed_cases;
+  vector<lower = 0>[hardcoded_imputed_cases == 0 ? N : 0] imputed_cases;
 
   // Linear model parameters
   vector[num_coef] beta_toplevel;
@@ -294,7 +294,11 @@ transformed parameters {
           }
         }
 
-        new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[curr_full_subnat_pos] * time_resolution, days_to_impute_cases);
+        if (hardcoded_imputed_cases > 0) {
+          new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(hardcoded_imputed_cases * time_resolution, days_to_impute_cases);
+        } else {
+          new_cases[days_pos:(days_pos + days_to_impute_cases - 1)] = rep_row_vector(imputed_cases[curr_full_subnat_pos] * time_resolution, days_to_impute_cases);
+        }
 
         if (mobility_model_type == MOBILITY_MODEL_INV_LOGIT) {
           mobility_effect[days_pos:days_end] = 2 * inv_logit(design_matrix[days_pos:days_end] * beta[, curr_full_subnat_pos]) .* trend[days_pos:days_end];
@@ -351,7 +355,10 @@ model {
   }
 
   tau_impute_cases ~ exponential(tau_impute_cases_inv_mean);
-  imputed_cases ~ exponential(1 / tau_impute_cases);
+
+  if (hardcoded_imputed_cases == 0) {
+    imputed_cases ~ exponential(1 / tau_impute_cases);
+  }
 
   beta_toplevel ~ normal(0, hyperparam_tau_beta_toplevel);
 
@@ -421,8 +428,8 @@ model {
         int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
 
         deaths[(days_pos + start_epidemic_offset - 1):days_end] ~ neg_binomial_2(mean_deaths[(days_pos + start_epidemic_offset - 1):days_end],
-                                                                                 overdisp_deaths);
-                                                                                 // overdisp_deaths[curr_subnat_pos]);
+                                                                                 // overdisp_deaths);
+                                                                                 overdisp_deaths[country_index]);
 
         days_pos = days_end + days_to_forecast + 1;
       }
@@ -448,7 +455,7 @@ generated quantities {
         int curr_subnat_pos = subnat_pos + subnat_index - 1;
         int days_end = days_pos + days_observed[curr_subnat_pos] - 1;
 
-        deaths_rep[days_pos:days_end] = to_vector(neg_binomial_2_rng(mean_deaths[days_pos:days_end], overdisp_deaths));
+        deaths_rep[days_pos:days_end] = to_vector(neg_binomial_2_rng(mean_deaths[days_pos:days_end], overdisp_deaths[country_index]));
         cum_deaths_rep[days_pos:days_end] = cumulative_sum(deaths_rep[days_pos:days_end]);
 
         days_pos = days_end + days_to_forecast + 1;

@@ -39,6 +39,7 @@ Options:
   --old-r0  Don't use log R0, instead follow same model as Vollmer et al.
   --fixed-tau-beta  Homogenous partial pooling for all mobility model parameters as in the Vollmer et al. model.
   --fixed-ifr  Remove noise from IFR.
+  --hardcode-imputed-cases=<cases> [default: 0]
   --no-predict  No prediction
   --random-init  Use default Stan initialiser settings instead of custom initialiser.
   --show-script-options
@@ -47,7 +48,7 @@ Options:
 ") -> opt_desc
 
 script_options <- if (interactive()) {
-  docopt::docopt(opt_desc, 'fit pt py dk -i 4000 --hyperparam=joint_hyperparam.yaml --include-param-trend --complete-pooling=trend -o test2 --adapt-delta=0.99')
+  docopt::docopt(opt_desc, 'fit aw bs -i 20 --hyperparam=separate_hyperparam.yaml -o test --hardcode-imputed-cases=10')
 } else {
   docopt::docopt(opt_desc)
 }
@@ -61,7 +62,7 @@ library(tidyverse)
 library(wpp2019)
 
 script_options %<>%
-  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff"), as.integer) %>%
+  modify_at(c("chains", "iter", "warmup", "rand-sample-subnat", "merge-days", "epidemic-cutoff", "hardcode-imputed-cases"), as.integer) %>%
   modify_at(c("adapt-delta"), as.numeric) %>%
   modify_at("mobility-model-type", factor, levels = c("inv_logit", "exponential")) %>%
   modify_at("country-code", str_to_upper)
@@ -321,6 +322,7 @@ stan_data <- lst(
   generate_prediction = !script_options$`no-predict`,
   use_transformed_param_constraints = 0,
   use_parametric_trend = script_options$`include-param-trend`,
+  hardcoded_imputed_cases = script_options$`hardcode-imputed-cases`,
 
   # Hyperparameters
 
@@ -520,45 +522,24 @@ tryCatch({
 
   cat("\n\n")
 
-  nat_results <- mob_fit %>%
-    extract_nat_results("national_log_R0")
-
-  subnat_results <- mob_fit %>%
-    extract_subnat_results(c("log_R0", "national_effect_log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"))
-
-  day_param <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases")
+  day_params <- c("Rt", "Rt_adj", "adj_factor", "mobility_effect", "mean_deaths", "trend", "new_cases")
 
   if (!script_options$`no-predict`) {
-    day_param %<>% c("deaths_rep")
+    day_params %<>% c("deaths_rep")
   }
 
-  day_results <- mob_fit %>%
-    extract_day_results(day_param)
-
-  beta_results <- mob_fit %>%
-    extract_beta() %>%
-    rename(beta_results = param_results)
-
   use_subnat_data %<>%
+    extract_results(mob_fit,
+                    hyper_params = c("toplevel_log_R0"),
+                    nat_params = c("national_log_R0", "national_effect_log_R0", "subnational_effect_log_R0_sd"),
+                    subnat_params = c("log_R0", "subnational_effect_log_R0", "imputed_cases", "ifr", "trend_lambda", "trend_kappa"),
+                    day_params = day_params) %>%
     mutate(
-      subnat_index = seq(n()),
-      daily_data = map(daily_data, mutate, day_index = seq(n()))
-    ) %>%
-    left_join(subnat_results, by = "subnat_index") %>%
-    left_join(beta_results, by = "subnat_index") %>%
-    left_join(day_results, by = c("country_code", "sub_region")) %>%
-    mutate(
-      daily_data = map2(daily_data, day_data, left_join, by = "day_index")
-    ) %>%
-    select(-day_data) %>%
-    nest(country_data = -c(country_index, country_code, country_name, countrycode_iso3n)) %>%
-    mutate(run_country_index = seq(n())) %>%
-    left_join(nat_results, by = "run_country_index") %>%
-    select(-run_country_index) %>%
-    mutate(max_rhat,
-           min_ess_bulk,
-           min_ess_tail,
-           div_trans = get_num_divergent(mob_fit))
+      max_rhat,
+      min_ess_bulk,
+      min_ess_tail,
+      div_trans = get_num_divergent(mob_fit),
+    )
 
   if (!is_empty(script_options$`job-id`)) {
     use_subnat_data %<>%
